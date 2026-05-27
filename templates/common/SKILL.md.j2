@@ -1,0 +1,54 @@
+---
+name: {{ requirement.name }}
+description: {{ requirement.description }}
+---
+
+# {{ title }}
+
+## Purpose
+
+{{ purpose }}
+
+## When to use
+
+{% for item in requirement.when_to_use %}
+- {{ item }}
+{% endfor %}
+
+## When not to use
+
+{% for item in requirement.when_not_to_use %}
+- {{ item }}
+{% endfor %}
+
+## Required inputs
+
+{% for item in requirement.required_inputs %}
+- {{ item }}
+{% endfor %}
+
+## Workflow
+
+{% for step in requirement.workflow %}
+{{ loop.index }}. {{ step }}
+{% endfor %}
+
+## Constraints
+
+{% for item in requirement.constraints %}
+- {{ item }}
+{% endfor %}
+
+## Output format
+
+```text
+{% for item in requirement.expected_outputs %}
+## {{ item }}
+{% endfor %}
+```
+
+## Quality gates
+
+{% for item in requirement.quality_gates %}
+- {{ item }}
+{% endfor %}

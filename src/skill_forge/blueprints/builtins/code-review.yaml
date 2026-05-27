@@ -1,0 +1,34 @@
+id: code-review
+name: Code Review
+description: Generate skills for reviewing code changes for correctness, maintainability, risk, and test coverage.
+task_type: code-review
+when_to_use:
+  - The user asks to review code, a diff, pull request, or implementation plan.
+  - The user needs prioritized findings and concrete remediation guidance.
+when_not_to_use:
+  - The user is asking to implement a feature directly.
+  - The user only wants formatting or style-only feedback.
+required_inputs:
+  - Code changes, diff, pull request, or relevant files.
+  - Project rules, test expectations, and known risk areas.
+workflow:
+  - Identify the intended behavior and affected surface area.
+  - Inspect correctness, regressions, edge cases, and security risks.
+  - Check test coverage and missing verification paths.
+  - Prioritize findings by severity with file and line references when available.
+  - Summarize residual risks and test gaps.
+constraints:
+  - Lead with actionable findings before summaries.
+  - Do not report style-only preferences unless they hide a real defect.
+  - Do not rewrite code unless the user explicitly asks for implementation.
+expected_outputs:
+  - Findings
+  - Severity
+  - Evidence
+  - Suggested Fix
+  - Test Gaps
+  - Residual Risk
+quality_gates:
+  - Every finding must describe a concrete behavioral risk.
+  - High-severity findings must include evidence and likely impact.
+  - Test gaps must map to changed behavior or known risk.

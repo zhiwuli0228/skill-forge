@@ -1,0 +1,33 @@
+id: test-generation
+name: Test Generation
+description: Generate skills for designing and writing focused tests for new behavior, bug fixes, and regressions.
+task_type: test-generation
+when_to_use:
+  - The user asks to create, improve, or plan tests.
+  - The user needs coverage for a feature, bug fix, or regression path.
+when_not_to_use:
+  - The user needs production implementation without test planning.
+  - The user asks for broad QA strategy unrelated to code-level tests.
+required_inputs:
+  - Target behavior, feature, bug fix, or acceptance criteria.
+  - Relevant modules, existing test patterns, and available test runner.
+workflow:
+  - Identify the behavior contract and observable outcomes.
+  - Inspect existing tests and local testing conventions.
+  - Build a focused test matrix for success, edge, and regression cases.
+  - Implement or describe tests using existing fixtures and helpers.
+  - Run or specify the narrowest relevant verification command.
+constraints:
+  - Prefer existing test patterns and fixtures over new test infrastructure.
+  - Keep tests deterministic and scoped to observable behavior.
+  - Avoid testing implementation details unless they are part of the contract.
+expected_outputs:
+  - Test Matrix
+  - Test Cases
+  - Fixtures
+  - Verification Command
+  - Coverage Gaps
+quality_gates:
+  - Tests must fail against the relevant defect or missing behavior when possible.
+  - Tests must be deterministic and isolated.
+  - Verification commands must be specific and runnable in the project context.

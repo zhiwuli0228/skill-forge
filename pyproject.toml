@@ -1,0 +1,34 @@
+[project]
+name = "skill-forge"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "zhiwuli", email = "398147488@qq.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "python-frontmatter>=1.3.0",
+    "pyyaml>=6.0.3",
+    "questionary>=2.1.1",
+    "rich>=15.0.0",
+    "scikit-learn>=1.8.0",
+    "trafilatura>=2.0.0",
+    "typer>=0.25.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+skill-forge = "skill_forge:main"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"

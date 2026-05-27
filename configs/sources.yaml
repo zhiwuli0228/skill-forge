@@ -1,0 +1,39 @@
+sources:
+  - name: OpenAI Skills Documentation
+    type: docs
+    url: https://developers.openai.com/codex/skills
+    authority_level: official
+    enabled: true
+    metadata:
+      platform: codex
+      tags:
+        - skills
+        - codex
+  - name: Anthropic Claude Skills Documentation
+    type: docs
+    url: https://code.claude.com/docs/en/skills
+    authority_level: official
+    enabled: true
+    metadata:
+      platform: claude
+      tags:
+        - skills
+        - claude
+  - name: OpenCode Skills Reference
+    type: github
+    url: https://github.com/sst/opencode
+    authority_level: community
+    enabled: false
+    metadata:
+      platform: opencode
+      tags:
+        - skills
+        - opencode
+      discovery:
+        branch: main
+        skill_file_patterns:
+          - "*/SKILL.md"
+          - "skills/*/SKILL.md"
+          - ".codex/skills/*/SKILL.md"
+          - ".claude/skills/*/SKILL.md"
+          - ".opencode/skills/*/SKILL.md"

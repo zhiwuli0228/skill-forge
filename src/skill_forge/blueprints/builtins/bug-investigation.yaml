@@ -1,0 +1,41 @@
+id: bug-investigation
+name: Bug Investigation
+description: Generate skills for diagnosing bugs from symptoms, logs, stack traces, and source evidence.
+task_type: bug-investigation
+when_to_use:
+  - The user needs to investigate a defect or runtime failure.
+  - The user provides symptoms, logs, stack traces, or reproduction clues.
+when_not_to_use:
+  - The user is asking for new feature design.
+  - The user is asking for broad refactoring without a defect to diagnose.
+required_inputs:
+  - Symptoms, logs, stack traces, or reproduction steps.
+  - Relevant code paths, services, modules, or runtime context when available.
+workflow:
+  - Collect symptoms and evidence.
+  - Identify likely code paths.
+  - Build an evidence-backed root-cause chain.
+  - Propose a focused fix and test plan.
+constraints:
+  - Do not modify code before identifying an evidence-backed root cause.
+  - Avoid broad refactoring while diagnosing the issue.
+expected_outputs:
+  - Symptom
+  - Evidence
+  - Root Cause
+  - Fix Plan
+  - Test Plan
+  - Risks
+quality_gates:
+  - Root cause must be supported by evidence.
+  - Fix plan must remain focused and testable.
+references:
+  - path: references/diagnosis-checklist.md
+    content: |
+      # Diagnosis Checklist
+
+      - Capture the observable symptom and user impact.
+      - Collect logs, stack traces, metrics, and reproduction details.
+      - Identify the smallest relevant code path before proposing changes.
+      - Link each root-cause claim to concrete evidence.
+      - Define a focused fix plan and regression test path.

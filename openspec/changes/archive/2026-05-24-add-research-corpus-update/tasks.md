@@ -1,0 +1,31 @@
+- [x] 1. Source configuration
+  - [x] 1.1 Add bundled `configs/sources.yaml` with enabled official/docs-oriented sources.
+  - [x] 1.2 Add structured source models for name, type, URL, authority level, enabled flag, and optional metadata.
+  - [x] 1.3 Implement source loading with user override at `~/.skill-forge/sources.yaml`.
+  - [x] 1.4 Add tests for default loading, user override loading, validation errors, and disabled sources.
+- [x] 2. Fetching and normalization
+  - [x] 2.1 Implement an injectable HTTP fetcher for docs and GitHub-style URL sources.
+  - [x] 2.2 Implement raw content capture with content type and source URL metadata.
+  - [x] 2.3 Implement HTML/Markdown-oriented text normalization with conservative fallback behavior.
+  - [x] 2.4 Add tests using mocked fetch responses for successful fetches and fetch failures.
+- [x] 3. Corpus persistence
+  - [x] 3.1 Add corpus file helpers for deterministic raw and normalized cache paths.
+  - [x] 3.2 Persist source and document metadata into SQLite.
+  - [x] 3.3 Extract and persist simple skill example or document summary metadata when available.
+  - [x] 3.4 Implement content-hash comparison and unchanged-document skip behavior.
+  - [x] 3.5 Add tests for cache writes, metadata rows, and repeated unchanged updates.
+- [x] 4. Update orchestration
+  - [x] 4.1 Implement a research updater service that processes enabled sources and returns success/skipped/failure outcomes.
+  - [x] 4.2 Continue processing after individual source failures.
+  - [x] 4.3 Return an all-failed result when every enabled source fails.
+  - [x] 4.4 Add tests for partial failure success and all-failure behavior.
+- [x] 5. CLI integration
+  - [x] 5.1 Add `skill-forge update`.
+  - [x] 5.2 Ensure update initializes workspace paths and SQLite before writing corpus data.
+  - [x] 5.3 Print a concise summary of updated, skipped, and failed sources.
+  - [x] 5.4 Return non-zero when all enabled sources fail.
+  - [x] 5.5 Add CLI runner tests for successful, partial-failure, and all-failure update runs.
+- [x] 6. Verification
+  - [x] 6.1 Run `uv run pytest`.
+  - [x] 6.2 Run `openspec.cmd validate "add-research-corpus-update" --strict`.
+  - [x] 6.3 Update `docs/openspec_change_plan.md` with implementation and verification progress.

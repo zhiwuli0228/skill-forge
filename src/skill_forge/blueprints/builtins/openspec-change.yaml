@@ -1,0 +1,35 @@
+id: openspec-change
+name: OpenSpec Change
+description: Generate skills for planning, implementing, verifying, and archiving OpenSpec-driven changes.
+task_type: openspec-change
+when_to_use:
+  - The user asks to create, continue, implement, verify, or archive an OpenSpec change.
+  - The work needs proposal, design, spec, tasks, implementation, verification, and archive discipline.
+when_not_to_use:
+  - The request is a small code edit that does not require an OpenSpec change.
+  - The user only wants a general explanation unrelated to the OpenSpec workflow.
+required_inputs:
+  - Change goal, scope, and constraints.
+  - Existing OpenSpec artifacts or roadmap entry when available.
+  - Verification commands and acceptance criteria.
+workflow:
+  - Identify the target change and read existing roadmap or OpenSpec artifacts.
+  - Create or update proposal, design, specs, and tasks in dependency order.
+  - Implement only the scoped tasks for the active change.
+  - Verify with tests and strict OpenSpec validation.
+  - Archive the completed change and update roadmap progress.
+constraints:
+  - Do not expand scope beyond the selected change.
+  - Capture newly discovered work in the roadmap instead of implementing it early.
+  - Keep OpenSpec specs synchronized before archive.
+expected_outputs:
+  - Change Summary
+  - Artifacts
+  - Implementation Notes
+  - Verification
+  - Archive Status
+  - Follow-up Changes
+quality_gates:
+  - Proposal, design, specs, and tasks must be complete before implementation.
+  - Every completed task must be verifiable.
+  - Archive must leave no active change for completed work.
