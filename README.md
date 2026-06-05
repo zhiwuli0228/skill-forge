@@ -8,6 +8,27 @@ It generates standard `SKILL.md` packages from natural-language requirements, su
 
 The default generation path is deterministic and does not require an LLM. Optional LLM-assisted refinement is available when explicitly requested with `--llm`.
 
+## Governance Entry Points
+
+Skill Forge is governed by a layered entry-point set. **This README is the user entry.** The files below are the **Agent entry points** — every AI Agent (Codex, Claude Code, opencode, and any other) must read them in the listed order before working on this repository.
+
+| File             | Purpose                                                                          |
+|------------------|----------------------------------------------------------------------------------|
+| `AGENTS.md`      | Universal entry point — positioning, reading order, scope rules, stop conditions |
+| `CODEX.md`       | Codex entry — design, planning, OpenSpec/SuperSpec change artifacts              |
+| `CLAUDE.md`      | Claude Code entry — implementation, tests, verification, evidence collection     |
+| `OPENCODE.md`    | opencode entry — fallback execution under strict scope                            |
+| `SUPERPOWERS.md` | Execution discipline — methodology and phase mapping, not project authority       |
+
+**Read the governance entry points first for any non-trivial change.** A non-trivial change is anything that touches more than one module, changes a public CLI surface, changes a stored artifact format (`skill-forge.json`, `eval-report.json`, config schema, blueprint schema), or introduces a new lifecycle phase, agent role, or governance rule.
+
+The governance stack is being built in phases:
+
+- **Phase 0 (this phase):** entry-point files only, no schema changes.
+- **Phase 1 (next):** OpenSpec + SuperSpec governance schema under `openspec/config.yaml`, `openspec/schemas/`, and `docs/03-openspec/`.
+
+The governance files define the rules. The OpenSpec change under `openspec/changes/` is where each change is tracked.
+
 ## Features
 
 - Generate a Skill package from a natural-language requirement.

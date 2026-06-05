@@ -8,6 +8,27 @@ Skill Forge 是一个本地优先的 CLI 工作台，用于设计、生成、校
 
 默认生成路径采用确定性实现，不依赖 LLM 也可以生成 Skill。需要时可以通过 `--llm` 显式启用 LLM 辅助需求精炼。
 
+## 治理入口
+
+Skill Forge 通过一组分层入口文件进行治理。**本 README 是用户入口。** 下列文件是 **Agent 入口** —— 任何 AI Agent（Codex、Claude Code、opencode 以及其他）在对本仓库做任何工作之前，都必须按顺序阅读这些文件。
+
+| 文件              | 作用                                                              |
+|-------------------|-------------------------------------------------------------------|
+| `AGENTS.md`       | 通用入口 —— 项目定位、阅读顺序、范围规则、停止条件                |
+| `CODEX.md`        | Codex 入口 —— 设计、规划、OpenSpec/SuperSpec 变更制品             |
+| `CLAUDE.md`       | Claude Code 入口 —— 实现、测试、验证、证据记录                    |
+| `OPENCODE.md`     | opencode 入口 —— 严格范围下的回退执行                             |
+| `SUPERPOWERS.md`  | 执行纪律 —— 方法论与阶段映射，不是项目权威来源                    |
+
+**任何非平凡变更，请先阅读治理入口。** 非平凡变更包括：影响多个模块、修改 CLI 公共面、修改持久化制品格式（`skill-forge.json`、`eval-report.json`、配置 schema、蓝图 schema）、或新增生命周期阶段、Agent 角色、治理规则。
+
+治理体系按阶段建设：
+
+- **Phase 0（当前阶段）**：仅治理入口文件，不动 schema。
+- **Phase 1（下一阶段）**：在 `openspec/config.yaml`、`openspec/schemas/`、`docs/03-openspec/` 下接入 OpenSpec + SuperSpec 治理 schema。
+
+治理文件定义规则，每次变更在 `openspec/changes/` 下的 OpenSpec change 中追踪。
+
 ## 功能
 
 - 根据自然语言需求生成 Skill 包。
