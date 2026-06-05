@@ -296,7 +296,7 @@ preserved.
 
 ## 16. Commit SHA
 
-The commit SHA will be recorded in
-`openspec/changes/add-governance-enforcement-hooks/verification.md`
-after the commit lands. As of this report draft, the commit
-has not yet been made; the SHA is `TBD`.
+The Phase 4 change is committed as `0bcd73f` with the message
+`chore: add governance enforcement check`. A follow-up docs
+commit (`<see git log>`) records the SHA in
+`openspec/changes/add-governance-enforcement-hooks/verification.md`.

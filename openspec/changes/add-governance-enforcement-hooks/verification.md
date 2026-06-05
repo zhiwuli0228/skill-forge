@@ -157,3 +157,12 @@
 ## Verdict
 
 `done`
+
+## Commit SHA
+
+The Phase 4 change is committed as `0bcd73f` with the message
+`chore: add governance enforcement check`. The commit was
+prepared with explicit `git add <path>` commands for each
+Phase 4 path; no `git add .` or `git add -A` was used. The
+pre-existing dirty WIP is preserved untouched and is not
+included in the commit.
