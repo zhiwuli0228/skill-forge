@@ -1,20 +1,191 @@
-schema: spec-driven
+schema: skill-forge-governance
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context shown to AI when creating change artifacts.
+# Project Harness rules for Skill Forge live here.
+context: |
+  Project: Skill Forge.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Positioning:
+    Skill Forge is a local-first Skill generation and AI Harness
+    governance tool. It is the host project for the
+    OpenSpec + SuperSpec + Superpowers + Project Harness stack.
+    It is not a generic Python CLI.
+
+  Governance stack:
+    - OpenSpec owns the change lifecycle and `/opsx` command surface.
+    - SuperSpec-style schema owns structured change artifacts
+      (brainstorm, proposal, spec, design, review, plan, tasks, verification).
+    - Superpowers owns execution discipline
+      (brainstorm, writing-plans, executing-plans, TDD, debugging, verification).
+    - Project Harness (AGENTS.md, CLAUDE.md, SUPERPOWERS.md, this config,
+      docs/03-openspec/) owns Skill Forge-specific constraints.
+
+  Primary technology:
+    - Language: Python 3.11+
+    - Package manager: uv
+    - CLI framework: Typer
+    - Data models: Pydantic / pydantic-settings
+    - Templates: Jinja2
+    - Terminal UI: Rich / Questionary
+    - Config format: YAML
+    - Local metadata: SQLite
+    - Retrieval: deterministic local retrieval first
+    - Test framework: pytest
+
+  Core constraints:
+    - local-first behavior: data and state stay on the user's machine
+      by default. No required network calls in the default flow.
+    - deterministic generation: the default generation path is
+      deterministic and reproducible. Optional LLM refinement is only
+      invoked when the user explicitly opts in.
+    - generated Skill provenance: every generated Skill package must
+      carry provenance (`skill-forge.json`) that records the source
+      blueprint, requirement, schema version, and LLM selection.
+    - validation-first quality: generated Skills must pass static
+      validation before they are exposed for installation or
+      upgrade. Validation results are part of the artifact, not
+      an afterthought.
+    - platform adapter boundaries: Codex, opencode, and Claude
+      adapter code must live in isolated modules. A platform-specific
+      behavior must not leak into shared core modules.
+    - bounded project context ingestion: project context is read from
+      a fixed allowlist of files (AGENTS.md, CLAUDE.md, README.md,
+      .opencode/, .claude/, .agents/, openspec/). The reader must
+      bound line counts and total size, and must not read arbitrary
+      paths on disk.
+    - chat history independence: generated artifacts must not silently
+      depend on prior chat context. Every artifact must be derivable
+      from inputs on disk and the artifact set in the change folder.
+    - backward compatibility: existing Skill Forge workspaces
+      (config, drafts, output, corpus) must keep working. Schema
+      changes must be additive and versioned.
+
+  Agent roles (see AGENTS.md / CLAUDE.md / CODEX.md / OPENCODE.md / SUPERPOWERS.md):
+    - Codex: requirement analysis, design, OpenSpec change planning,
+      plan.md, task decomposition.
+    - Claude Code: implementation, tests, verification, evidence
+      collection, commit preparation only when requested.
+    - opencode: fallback implementation with strict file-scope
+      boundaries and minimal diffs.
+    - Superpowers: execution discipline. Brainstorm, writing-plans,
+      executing-plans, TDD, systematic debugging, verification before
+      completion. Not project authority.
+
+# Per-artifact rules. These constrain the content of each
+# change artifact produced under schema `skill-forge-governance`.
+rules:
+  brainstorm:
+    - State the actual user problem before proposing implementation.
+    - List at least two candidate approaches for high-risk or
+      cross-cutting changes; record assumptions explicitly.
+    - Identify which spec capabilities (if any) will be added,
+      modified, removed, or renamed.
+    - Do not write code, templates, or schema files during
+      brainstorm. Output is plain Markdown only.
+    - Brainstorm is optional. It is required for changes that
+      introduce a new lifecycle phase, agent role, governance
+      rule, or schema field.
+
+  proposal:
+    - State the problem, goal, scope, non-goals, risks, and the
+      modules that will be affected.
+    - Identify whether the change affects CLI behavior, generated
+      Skill output, templates, validation, provenance, or
+      workspace state.
+    - Separate governance-only changes from runtime feature
+      changes in distinct proposals.
+    - Include rollback or fallback notes for risky changes.
+    - Keep the proposal under two pages of body text. Move
+      implementation details to design.md.
+
+  spec:
+    - Use observable SHALL/MUST-style requirements. Avoid
+      "should" or "may" for normative behavior.
+    - Every requirement must have at least one Scenario using
+      the `#### Scenario: <name>` + WHEN/THEN format with
+      exactly four hashtags.
+    - Distinguish Skill Forge internal behavior from generated
+      Skill package behavior. Generated-package behavior must
+      be phrased in terms the package can be validated against.
+    - Do not encode implementation details as requirements
+      unless they are externally observable (CLI output,
+      artifact schema, exit code, side effect on disk).
+    - Use ADDED / MODIFIED / REMOVED / RENAMED delta headers
+      consistent with OpenSpec spec conventions.
+
+  design:
+    - Define module boundaries before implementation details.
+      State which new modules are added and which existing
+      modules are touched.
+    - Define data contracts when any of the following change:
+      config schema, blueprint schema, validation result schema,
+      package metadata schema, or provenance schema.
+    - Explain compatibility impact for Claude Code, Codex,
+      opencode, and the generated Skill packages.
+    - Include offline and deterministic-mode behavior.
+    - Include security and local filesystem implications:
+      which paths are read, which paths are written, and which
+      environment variables influence behavior.
+    - Reference the proposal and spec by section. Do not
+      duplicate them.
+
+  review:
+    - Confirm proposal, spec, design, plan, and tasks are
+      mutually consistent. A reviewer must be able to find the
+      same change id, the same scope list, and the same
+      verification commands in every artifact.
+    - Confirm the file modification scope is explicit. The
+      allowed-path list and the forbidden-path list must be
+      in plan.md and respected by tasks.md.
+    - Confirm verification commands are executable in the
+      current environment. A review must not approve commands
+      that depend on missing tools.
+    - Block implementation when requirements are ambiguous,
+      the change is too broad, or the schema/format impact
+      is unstated. The review output is a verdict:
+      `approve`, `request-changes`, or `block`.
+
+  plan:
+    - Be executable by a weaker implementation agent. The plan
+      must not require the reader to guess.
+    - Use small ordered steps. Each step must fit in one
+      implementation session.
+    - Include the exact files expected to change, with the
+      expected direction of change (new file, modify section,
+      delete section).
+    - Include verification after each major phase: the exact
+      command, the expected exit code, and the expected
+      observation.
+    - Avoid broad refactors unless explicitly approved in the
+      proposal's scope section.
+    - Restate the allowed-path list at the top. If a step
+      needs a path that is not on the list, the plan must
+      stop and escalate.
+
+  tasks:
+    - Separate docs, tests, config, schema, and code tasks.
+      Do not mix them in one task.
+    - Each task must be a checkbox `- [ ] X.Y <description>`
+      so the apply phase can track progress.
+    - Each task must have an observable completion condition:
+      a file exists, a test passes, a command exits with a
+      specific code, a section in a doc is updated.
+    - Each task must include the expected evidence: which
+      file, which command, which output section.
+    - Do not combine unrelated features into one task. A
+      task that "also fixes X" is two tasks.
+    - Tasks must respect the allowed-path list from plan.md.
+      A task that would touch a forbidden path must escalate.
+
+  verification:
+    - Include exact commands executed, in the order executed.
+    - Include pass/fail status and a short output summary
+      (counts, exit codes, key lines). Do not paste full
+      logs unless they are short.
+    - Record every command that was skipped and the reason
+      (environment, missing tool, blocked dependency, or
+      out-of-scope for this phase).
+    - Record remaining risks and follow-up changes. A
+      verification report with hidden risks is incomplete.
+    - Verification is required to claim a change is done.
+      A change without a verification record is not done.

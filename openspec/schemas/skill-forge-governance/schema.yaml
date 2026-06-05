@@ -1,0 +1,311 @@
+name: skill-forge-governance
+version: 1
+description: |
+  Skill Forge project-local schema. Adds brainstorm, review, and verification
+  to the default OpenSpec lifecycle. Eight-artifact order:
+  brainstorm -> proposal -> spec -> design -> review -> plan -> tasks -> verification.
+
+artifacts:
+  - id: brainstorm
+    generates: brainstorm.md
+    description: Problem clarification and option enumeration before any proposal.
+    template: brainstorm.md
+    instruction: |
+      Create the brainstorm document. It is the FIRST artifact for any
+      non-trivial change and is REQUIRED when the change introduces a new
+      lifecycle phase, agent role, governance rule, or schema field.
+
+      Sections:
+      - **Problem**: The actual user problem in 2-3 sentences. Not the
+        proposed solution.
+      - **Context**: Current state, constraints, and stakeholders. Cite
+        files in the repository by path.
+      - **Options**: At least two candidate approaches. For each: what it
+        changes, what it does not change, and the most important risk.
+      - **Assumptions**: List of assumptions that must hold for any option
+        to work. Mark which are unverified.
+      - **Open Questions**: Decisions that must be made before the
+        proposal can be written. Each question is blocking or non-blocking.
+      - **Recommendation**: The recommended option and the one-line reason.
+        If no recommendation is possible, say so explicitly.
+
+      Output is plain Markdown. Do not write code, templates, or schema
+      files during brainstorm. The artifact is small and readable.
+    requires: []
+
+  - id: proposal
+    generates: proposal.md
+    description: Why this change exists. Scope, non-goals, risks, affected modules.
+    template: proposal.md
+    instruction: |
+      Create the proposal document. It establishes WHY the change is
+      needed, WHAT it touches, and what it explicitly does NOT touch.
+
+      Sections (in this order):
+      - **Why**: 1-2 sentences. The problem or opportunity. Why now.
+      - **What Changes**: Bullet list. New capabilities, modifications,
+        removals. Mark breaking changes with **BREAKING**.
+      - **Capabilities**: One or both of:
+        - **New Capabilities**: kebab-case names. Each becomes a new
+          `specs/<name>/spec.md`.
+        - **Modified Capabilities**: existing spec folder names from
+          `openspec/specs/`. Each needs a delta spec file.
+        - **Removed Capabilities**: existing spec folder names being
+          retired.
+      - **Impact**: Affected code, APIs, dependencies, schemas, or
+        systems. Include the change's effect on existing workspaces.
+      - **Non-Goals**: What this change is explicitly NOT doing.
+      - **Risks**: Top 3 risks with one-line mitigations.
+      - **Rollback**: How to revert this change if it lands broken.
+
+      Keep it under two pages of body text. Implementation detail
+      belongs in design.md. If brainstorm.md exists, the proposal must
+      be consistent with it.
+    requires: []
+
+  - id: spec
+    generates: "specs/**/*.md"
+    description: Observable requirements and scenarios per capability.
+    template: spec.md
+    instruction: |
+      Create the spec files. One file per capability listed in
+      proposal's Capabilities section. File path is
+      `specs/<capability>/spec.md` under the change folder.
+
+      Format:
+      - Heading: `# <capability> Specification` (kebab-case to title case).
+      - `## Purpose`: 1-2 sentences. What the capability is for.
+      - Delta operations under `## ADDED Requirements`, `## MODIFIED Requirements`,
+        `## REMOVED Requirements`, `## RENAMED Requirements`. Use these
+        headers in this order if multiple are present.
+      - Each requirement: `### Requirement: <name>` followed by
+        SHALL/MUST-style description.
+      - Each scenario: `#### Scenario: <name>` (exactly four hashtags)
+        with `**WHEN**` and `**THEN**` lines.
+      - Every requirement must have at least one scenario.
+
+      Pitfalls:
+      - Using 3 hashtags or bullets for scenarios will fail silently.
+      - MODIFIED requirements must include the FULL updated content
+        under the header, not a partial diff. Partial MODIFIED loses
+        detail at archive time.
+      - Do not encode implementation details (file paths, internal
+        function names) as requirements unless they are externally
+        observable (CLI surface, artifact schema, exit code, side
+        effect on disk).
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Module boundaries, data contracts, and trade-offs.
+    template: design.md
+    instruction: |
+      Create the design document. It explains HOW the change will be
+      implemented, focusing on architecture, not line-by-line edits.
+
+      Required sections:
+      - **Context**: Background, current state, constraints, stakeholders.
+        Reference files by path.
+      - **Goals / Non-Goals**: What this design achieves and explicitly
+        excludes. Restate proposal's non-goals.
+      - **Decisions**: Key technical choices, each with rationale and
+        alternatives considered. Format: Decision / Rationale / Alternatives.
+      - **Data Contracts**: When any of the following change: config
+        schema, blueprint schema, validation result schema, package
+        metadata schema, or provenance schema. Show the new shape.
+      - **Module Boundaries**: Which new modules are added, which
+        existing modules are touched, and what is left untouched.
+      - **Compatibility Impact**: For Claude Code, Codex, opencode,
+        and generated Skill packages.
+      - **Offline and Deterministic Mode**: Behavior when the network
+        is unavailable or the user opts out of LLM refinement.
+      - **Security and Filesystem**: Which paths are read, which are
+        written, which environment variables matter.
+      - **Risks / Trade-offs**: Known limitations. Format:
+        [Risk] -> Mitigation.
+      - **Migration Plan**: Steps to deploy, rollback steps.
+      - **Open Questions**: Outstanding decisions or unknowns.
+
+      Skip the document only when the change is single-file, single-
+      module, and does not change any data contract.
+    requires:
+      - proposal
+
+  - id: review
+    generates: review.md
+    description: Cross-artifact consistency check between design and plan.
+    template: review.md
+    instruction: |
+      Create the review document. It cross-checks proposal, spec,
+      design, plan, and tasks for consistency BEFORE implementation
+      starts. The review is the gate between planning and execution.
+
+      Required sections:
+      - **Change Id**: The change folder name.
+      - **Reviewer**: Who produced this review. May be the same Agent
+        that drafted the artifacts, but must be re-read with a
+        critical eye.
+      - **Scope Coverage**: For each artifact, the verdict on whether
+        it satisfies the schema rules. List missing required sections.
+      - **Cross-Artifact Consistency**:
+        - The capability names in proposal match the spec files.
+        - The data contracts in design match the affected files in plan.
+        - The allowed-path list in plan matches the files in tasks.
+        - The verification commands in tasks match the commands
+          listed in plan.
+      - **Allowed Path List**: Confirm the explicit allowed and
+        forbidden paths in plan.md. Reject the change if the list
+        is missing or if a task touches a forbidden path.
+      - **Verification Readiness**: Each verification command must
+        be runnable in the current environment. List any command
+        that depends on a missing tool.
+      - **Verdict**: One of:
+        - `approve`: all artifacts are consistent, scope is explicit,
+          verification is runnable.
+        - `request-changes`: specific changes are listed under
+          `## Required Changes` and must be applied before re-review.
+        - `block`: requirements are ambiguous, the change is too
+          broad, or the schema impact is unstated. Re-draft required.
+
+      A change with verdict `block` cannot proceed to plan.
+      A change with verdict `request-changes` cannot proceed to tasks
+      until the listed changes are applied.
+    requires:
+      - design
+
+  - id: plan
+    generates: plan.md
+    description: Executable plan for the implementation agent.
+    template: plan.md
+    instruction: |
+      Create the plan document. It is the executable contract between
+      the planning agent and the implementation agent. The plan must
+      be runnable by a weaker agent that has not seen the conversation
+      history.
+
+      Required sections:
+      - **Change Id**: The change folder name.
+      - **Allowed Paths**: Explicit list of paths the implementation
+        may modify.
+      - **Forbidden Paths**: Explicit list of paths the implementation
+        must NOT modify.
+      - **Pre-conditions**: What must be true before step 1 runs.
+        E.g., review verdict is `approve`.
+      - **Steps**: Numbered. Each step has:
+        - A short title.
+        - The exact files to change.
+        - The exact commands to run for verification of this step.
+        - The expected exit code and observation.
+        - The escalation rule: if the step fails, what is the
+          recovery action (rollback step X, or stop and report).
+      - **Final Verification**: The exact commands to run at the
+        end of all steps. These are repeated in tasks.md and
+        verification.md.
+      - **Rollback**: The exact actions to revert the change if
+        verification fails after the last step.
+
+      Pitfalls:
+      - The plan must be runnable by an agent that has only read
+        AGENTS.md, CODEX.md/CLAUDE.md, the change folder, and the
+        files listed in `Allowed Paths`.
+      - If a step needs a path that is not on the allowed list, the
+        plan must stop at the planning stage and escalate.
+    requires:
+      - design
+      - review
+
+  - id: tasks
+    generates: tasks.md
+    description: Tracked checklist. Each item has an observable completion condition.
+    template: tasks.md
+    instruction: |
+      Create the task list. The apply phase parses checkboxes to
+      track progress. Tasks not using `- [ ]` will not be tracked.
+
+      Format:
+      - Group related tasks under `## N. <Group Name>` headings.
+      - Each task MUST be a checkbox `- [ ] N.M <description>`.
+      - Each task MUST cite the file(s) it touches and the expected
+        completion observation (a file exists, a test passes, a
+        command exits with a specific code).
+      - Order tasks by dependency. The apply phase walks the list
+        in order.
+      - Tasks must respect the allowed-path list from plan.md.
+        A task that would touch a forbidden path must escalate
+        rather than being silently expanded.
+
+      Pitfall: combining docs, tests, config, and code into a
+      single task makes verification ambiguous. Split them.
+    requires:
+      - plan
+
+  - id: verification
+    generates: verification.md
+    description: Evidence record. Commands, exit codes, output, skipped, risks.
+    template: verification.md
+    instruction: |
+      Create the verification document. It is the evidence record
+      for the change. It is written AT THE END of the change, after
+      tasks are complete, not before.
+
+      Required sections:
+      - **Change Id**: The change folder name.
+      - **Executed Commands**: Exact commands run, in the order
+        run. For each: command, working directory, exit code,
+        short output summary.
+      - **Test Results**: Pass/fail counts. The full pytest
+        summary line is enough.
+      - **OpenSpec Validation**: Output of `openspec validate
+        <change-id> --strict`. Must be `valid` or the change is
+        not done.
+      - **Skipped Commands**: Commands the implementation did not
+        run, with the reason for skipping. The reason is required;
+        "I forgot" is not a reason.
+      - **Deviations from Plan**: Differences between the planned
+        file list and the actual file list, with the reason.
+      - **Remaining Risks**: Anything that could still break or
+        surprise. Format: [Risk] -> Mitigation / Follow-up.
+      - **Follow-up Changes**: OpenSpec changes that should
+        follow this one. If none, say "None".
+      - **Verdict**: One of:
+        - `done`: all steps passed, all verifications recorded,
+          no blocking risks.
+        - `done-with-risks`: done, but specific risks remain and
+          are listed above. Acceptable for phased delivery.
+        - `not-done`: a verification step failed. The change
+          is not archiveable.
+
+      A change without a verification record is not done.
+    requires:
+      - tasks
+
+apply:
+  requires: [tasks]
+  tracks: tasks.md
+  instruction: |
+    Read the change folder end-to-end before starting: proposal,
+    spec, design, review, plan, tasks. Do not start implementation
+    if review.md verdict is not `approve`.
+
+    Work through tasks in order. For each task:
+    1. Re-read the task statement and the relevant section of plan.md.
+    2. Make the change. Stay inside the allowed-path list.
+    3. Run the step's verification command. Record exit code.
+    4. If verification fails, apply `systematic-debugging` from
+       SUPERPOWERS.md. Do not "fix" the test to match a broken
+       implementation.
+    5. Mark the task done only when the completion observation
+       is observed.
+
+    After the last task:
+    1. Run the final verification commands from plan.md.
+    2. Write verification.md.
+    3. Run `openspec validate <change-id> --strict`. Must pass.
+
+    Pause and report when:
+    - A task would require touching a forbidden path.
+    - A verification command cannot run for non-environmental reasons.
+    - The actual file list differs from the planned file list.
+    - The plan and the repository state disagree in a way that
+      affects the diff.
