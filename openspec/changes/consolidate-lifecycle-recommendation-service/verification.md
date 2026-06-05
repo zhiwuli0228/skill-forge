@@ -216,3 +216,16 @@
 ## Verdict
 
 `done`
+
+## Commit SHA
+
+The Phase 5 change is committed as `2cb3912` (short
+SHA; full SHA: `2cb39126aebcc090e5822324f951ccc5b313391b`)
+with the message `refactor: reuse lifecycle recommendation rules in service`.
+The commit was prepared with explicit
+`git add <path>` commands for each of the 12 Phase 5
+paths; no `git add .` or `git add -A` was used. The
+pre-existing dirty WIP is preserved untouched and is
+not included in the commit. The verification report
+at `docs/00-project/lifecycle-service-adapter-verification-report.md`
+records the same SHA.
