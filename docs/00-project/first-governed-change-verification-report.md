@@ -328,9 +328,11 @@ explicitly out of scope for Phase 3 and Phase 4.
 
 ## 11. Commit
 
-The commit message is `feat: add governed skill lifecycle recommendation slice`.
-The commit SHA is recorded in the hand-off note at the end of
-this report.
+- Commit message: `feat: add governed skill lifecycle recommendation slice`.
+- Commit SHA: `44f60fbad51d5ff11bfea860fcd65cf2f1fbe10b` (short: `44f60fb`).
+- Files changed: 12 (1 docs, 8 OpenSpec artifacts in the change
+  folder, 1 nested spec file, 1 source module, 1 test file).
+- Insertions: 1977 lines.
 
 The commit's file list is exactly the Phase 3 file list in
 Section 2. The pre-existing dirty WIP is not included.
