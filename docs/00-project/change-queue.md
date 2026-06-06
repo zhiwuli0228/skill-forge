@@ -111,3 +111,41 @@ navigable for the substantive re-derivations.
   create its own eight-artifact folder.
 - The queue is a one-time snapshot taken at the
   start of Phase 6. A future phase may extend it.
+
+## 4. Phase 7 Bulk Slice Status
+
+On 2026-06-06 the A + B entries in the matrix were
+absorbed in a single OpenSpec change
+(`bulk-import-pre-existing-wip`) per the user's
+choice. The D + E entries were deferred. The
+duplicate spec was skipped.
+
+| # | Change Id | Phase 7 status | Source buckets after Phase 7 |
+|---|-----------|----------------|------------------------------|
+| 1 | `archive-pending-active-changes` | partial — the duplicate spec is skipped; the active folder is already absent (deletions in #3-#9 absorbed by bulk slice). | A (#75 — absorbed by #2; #84 — skipped) |
+| 2 | `commit-pre-existing-archive-copies` | **absorbed by `bulk-import-pre-existing-wip`**. | A (#3-#9, #68-#78) — absorbed |
+| 3 | `add-local-tool-gitignore-excludes` | **deferred** (D-class, future change). | D (#31-#54) — deferred |
+| 4 | `add-skill-adoption-workflow` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#82, #86, #87, #99) — absorbed |
+| 5 | `add-experience-accumulation` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#19, #28, #80, #88, #89, #94, #96) — absorbed |
+| 6 | `add-skill-promotion-and-rollback` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#14, #16, #85, #90-#93, #97, #98) — absorbed |
+| 7 | `add-skill-lifecycle-index` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#83) — absorbed |
+| 8 | `add-content-quality-rules` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#10, #21, #27, #79) — absorbed |
+| 9 | `add-intelligent-generation-fallback` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#17, #26, #57, #58, #81, #95) — absorbed |
+| 10 | `add-llm-field-generation` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#11, #19 [partial], #28 [partial]) — absorbed |
+| 11 | `add-retrieval-augmentation` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#12, #13, #22, #23, #29) — absorbed |
+| 12 | `add-community-skill-discovery` | deferred (large, user decision). | none |
+| 13 | `add-skill-lifecycle-governance` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#67) — absorbed |
+| 14 | `add-cli-storage-paths-extension` | **absorbed by `bulk-import-pre-existing-wip`** (verbatim). | B (#15, #18, #20, #22 [partial], #24, #25, #30) — absorbed |
+| 15 | `discard-superseded-design-doc` | **deferred** (E-class, user decision). | D (#56) — deferred |
+| 16 | `sync-agents-md-and-agent-md` | **deferred** (E-class, user decision). | E (#55) — deferred |
+| 17 | `commit-rectification-taskbooks` | **deferred** (E-class, user decision). | E (#59-#65) — deferred |
+| 18 | `commit-release-notes` | **deferred** (E-class, user decision). | E (#66) — deferred |
+| 19 | `commit-evolution-plans` | **deferred** (E-class, user decision). | E (#1, #2) — deferred |
+| 20 | `consolidate-skill-lifecycle-recommendation` | done (Phase 5). | none |
+
+After Phase 7 the future queue reduces to:
+`add-local-tool-gitignore-excludes` (#3),
+`add-community-skill-discovery` (#12),
+`discard-superseded-design-doc` (#15), and the
+four E-class user-decision changes (#16-#19). The
+B-class and A-class entries are absorbed.

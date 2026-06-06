@@ -130,3 +130,50 @@ The system SHALL preserve search availability when optional rerank fails.
 #### Scenario: Rerank disabled by configuration
 - **WHEN** rerank is requested but retrieval configuration disables rerank
 - **THEN** the command SHALL display TF-IDF-ranked results and a clear disabled-rerank warning
+
+### Requirement: Retrieval supports generation reference lookup
+The system SHALL expose local TF-IDF retrieval results for LLM-assisted generation as a non-blocking source of similar Skill references without changing default search behavior.
+
+#### Scenario: Generation lookup uses local retrieval
+- **WHEN** LLM-assisted generation requests similar Skill references
+- **THEN** the system SHALL query the existing local TF-IDF retrieval index
+- **AND** it SHALL NOT fetch remote source content
+- **AND** it SHALL NOT require vector search or external model dependencies
+
+#### Scenario: Generation lookup applies quality gates
+- **WHEN** local retrieval returns candidate references for generation
+- **THEN** the system SHALL filter or skip candidates that do not meet configured relevance and content-quality thresholds
+
+#### Scenario: Generation lookup does not use rerank
+- **WHEN** LLM-assisted generation requests similar Skill references
+- **THEN** the system SHALL NOT invoke optional search rerank behavior
+
+#### Scenario: Search command behavior remains unchanged
+- **WHEN** a user runs `skill-forge search "<query>"`
+- **THEN** the command SHALL preserve its existing TF-IDF search behavior and output contract
+
+### Requirement: Search results expose adoptable corpus references
+The system SHALL include stable local corpus references in search results so users can adopt cached Skill documents.
+
+#### Scenario: Search result includes document ID
+- **WHEN** search returns a corpus result
+- **THEN** the result SHALL include the local corpus document ID
+
+#### Scenario: Search result includes example ID when available
+- **WHEN** search returns a corpus result associated with a skill example row
+- **THEN** the result SHALL include the local skill example ID
+
+#### Scenario: Search reference is local
+- **WHEN** search displays corpus reference IDs
+- **THEN** those IDs SHALL refer to locally cached corpus records and SHALL NOT require network access to resolve
+
+### Requirement: Search output supports adoption workflow
+The search command SHALL display enough reference metadata for a user to run the adoption command for a returned result.
+
+#### Scenario: Search output shows adoptable ID
+- **WHEN** a user runs `skill-forge search "<query>"`
+- **THEN** the command output SHALL show the document ID or another documented local reference that can be passed to `skill-forge adopt`
+
+#### Scenario: Empty search remains unchanged
+- **WHEN** search returns no results
+- **THEN** the command SHALL preserve the existing empty-result behavior and SHALL NOT display adoption guidance for missing results

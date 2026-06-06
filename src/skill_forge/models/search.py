@@ -10,9 +10,12 @@ class CorpusDocument(BaseModel):
     example_id: int | None = None
     title: str
     source_name: str
+    source_url: str | None = None
+    document_url: str | None = None
     authority_level: str
     platform: str | None = None
     summary: str
+    quality_score: float | None = None
     normalized_path: Path
     content_hash: str
     updated_at: str | None = None
@@ -48,10 +51,15 @@ class CorpusDocument(BaseModel):
 
 
 class SearchResult(BaseModel):
+    document_id: int
+    example_id: int | None = None
     title: str
     source_name: str
+    source_url: str | None = None
+    document_url: str | None = None
     platform: str | None = None
     summary: str
+    quality_score: float | None = None
     score: float
     relevance_score: float
     authority_boost: float

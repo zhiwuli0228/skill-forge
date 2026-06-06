@@ -191,3 +191,53 @@
 - The matrix is the per-entry view; the recommended
   sequencing of future changes is in
   `docs/00-project/change-queue.md`.
+
+## 10. Phase 7 Bulk Slice Disposition
+
+On 2026-06-06 the A + B entries from the §1-§7
+matrix were absorbed in a single OpenSpec change
+(`bulk-import-pre-existing-wip`). The D + E
+entries were deferred. The duplicate spec
+(`openspec/specs/skill-lifecycle-recommendation/spec.md`,
+entry #84) was skipped per the recommendation in
+§5.
+
+### 10.1 Absorbed entries (60 total: 18 A + 42 B)
+
+| Range | Class | Status | Where absorbed |
+|-------|-------|--------|----------------|
+| #3-#9 (7 deletions) | A | absorbed | bulk-import-pre-existing-wip |
+| #68-#78 (11 archive folders) | A | absorbed | bulk-import-pre-existing-wip |
+| #10-#30 (21 modified tracked) | B | absorbed | bulk-import-pre-existing-wip |
+| #67 (1 untracked doc) | B | absorbed | bulk-import-pre-existing-wip |
+| #79-#83, #85 (6 untracked specs) | B | absorbed | bulk-import-pre-existing-wip |
+| #86-#95 (10 untracked source modules) | B | absorbed | bulk-import-pre-existing-wip |
+| #96-#99 (4 untracked tests) | B | absorbed | bulk-import-pre-existing-wip |
+
+### 10.2 Deferred entries (38 total: 24 D + 14 E)
+
+| Range | Class | Status | Where deferred |
+|-------|-------|--------|----------------|
+| #31-#54 (24 local tool files) | D | deferred | future `add-local-tool-gitignore-excludes` change |
+| #1-#2 (2 modified WIP docs) | E | deferred | user per-file decision |
+| #55-#66 (12 untracked WIP docs / design / roadmap / taskbooks) | E | deferred | user per-file decision |
+
+### 10.3 Skipped entries (1 total)
+
+| # | Class | Status | Why |
+|---|-------|--------|-----|
+| #84 | A | skipped | Duplicate of the spec shipped in Phase 3 (44f60fb). The user should `rm openspec/specs/skill-lifecycle-recommendation/spec.md` to discard the untracked copy. |
+
+### 10.4 Count correction
+
+The §8 class counts say "A=18, B=56" but the
+per-entry table in §1-§7 sums to A=18 (entries
+#3-#9, #68-#78, #84) and B=42 (entries #10-#30,
+#67, #79-#83, #85-#99; the 21 modified tracked +
+1 doc + 6 specs + 10 source + 4 tests = 42). The
+§8 "B=56" is a typo. The corrected total is
+**112 = 18 A + 42 B + 0 C + 24 D + 14 E + 1 dup
+skip**, or equivalently **60 absorbed + 38
+deferred + 1 skipped = 99** (the
+already-tracked pre-existing entries are not
+counted in the matrix because they are not dirty).

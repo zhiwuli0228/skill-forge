@@ -360,3 +360,58 @@ pre-existing dirty worktree is preserved untouched
 and is not included in the commit. A follow-up docs
 commit records the SHA in this report and in
 `openspec/changes/triage-dirty-worktree-change-queue/verification.md`.
+
+## 17. Phase 7 Bulk Slice Hand-off
+
+On 2026-06-06 the A + B entries from the Phase 6
+matrix were absorbed in a single OpenSpec change
+(`bulk-import-pre-existing-wip`). This Phase 6
+hand-off section records the Phase 7 disposition.
+
+### 17.1 What was absorbed by `bulk-import-pre-existing-wip`
+
+- 7 deletions under
+  `openspec/changes/add-community-skill-discovery/`
+  (A-class).
+- 11 archive folders under
+  `openspec/changes/archive/2026-05-*/` (A-class).
+- 21 modified tracked files (B-class) under
+  `openspec/specs/*/spec.md`, `src/skill_forge/**/*.py`,
+  and `tests/test_*.py`.
+- 21 untracked files (B-class): 1 doc, 6 specs, 10
+  source modules, 4 test files.
+- 9 new OpenSpec change artifacts under
+  `openspec/changes/bulk-import-pre-existing-wip/`.
+- 1 new top-level doc:
+  `docs/00-project/bulk-import-verification-report.md`.
+- 3 updated Phase 6 docs (this report and its two
+  companions).
+
+### 17.2 What was deferred
+
+- 24 D-class entries (`.claude/**`, `.codex/**`) —
+  future `add-local-tool-gitignore-excludes` change.
+- 14 E-class entries (WIP doc edits, agent file,
+  design docs, rectification taskbooks, release
+  notes, evolution plans) — user per-file decision.
+
+### 17.3 What was skipped
+
+- 1 duplicate spec
+  (`openspec/specs/skill-lifecycle-recommendation/spec.md`,
+  matrix entry #84) — the user should `rm` it
+  manually. The untracked file remains in the
+  working tree and is not in any Phase 7 commit.
+
+### 17.4 Push confirmation
+
+The Phase 7 bulk-slice commit and the follow-up
+docs commit are pushed to `origin/main` per the
+user's "push after every future change" rule. The
+git remote is
+`git@github.com:zhiwuli0228/skill-forge.git` on
+`main`. The full SHA is recorded in §16 of the
+Phase 7 verification report
+(`docs/00-project/bulk-import-verification-report.md`).
+The Phase 6 commits are pushed alongside the
+Phase 7 commits by the same push.

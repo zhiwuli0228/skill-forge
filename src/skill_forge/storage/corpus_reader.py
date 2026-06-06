@@ -22,9 +22,12 @@ class CorpusReader:
                     skill_examples.id AS example_id,
                     COALESCE(skill_examples.name, documents.title, sources.name) AS title,
                     sources.name AS source_name,
+                    sources.url AS source_url,
+                    documents.url AS document_url,
                     sources.authority_level AS authority_level,
                     skill_examples.platform AS platform,
                     COALESCE(skill_examples.summary, skill_examples.description, documents.title, '') AS summary,
+                    skill_examples.quality_score AS quality_score,
                     documents.normalized_path AS normalized_path,
                     COALESCE(documents.content_hash, '') AS content_hash,
                     COALESCE(documents.updated_at, documents.fetched_at, skill_examples.updated_at) AS updated_at
@@ -49,9 +52,12 @@ class CorpusReader:
                     example_id=int(row["example_id"]) if row["example_id"] is not None else None,
                     title=row["title"] or row["source_name"],
                     source_name=row["source_name"],
+                    source_url=row["source_url"],
+                    document_url=row["document_url"],
                     authority_level=row["authority_level"] or "reference",
                     platform=row["platform"],
                     summary=row["summary"] or "",
+                    quality_score=float(row["quality_score"]) if row["quality_score"] is not None else None,
                     normalized_path=normalized_path,
                     content_hash=row["content_hash"] or "",
                     updated_at=row["updated_at"],
@@ -59,6 +65,12 @@ class CorpusReader:
                 )
             )
         return documents
+
+    def load_document(self, document_id: int) -> CorpusDocument | None:
+        for document in self.load_documents():
+            if document.document_id == document_id:
+                return document
+        return None
 
     def corpus_signature(self, documents: list[CorpusDocument] | None = None) -> str:
         documents = documents if documents is not None else self.load_documents()

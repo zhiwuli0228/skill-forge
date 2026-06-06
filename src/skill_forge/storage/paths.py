@@ -50,6 +50,14 @@ class SkillForgePaths:
         return self.home / "blueprints"
 
     @property
+    def experience_dir(self) -> Path:
+        return self.home / "experience"
+
+    @property
+    def promotions_dir(self) -> Path:
+        return self.home / "promotions"
+
+    @property
     def index_dir(self) -> Path:
         return self.home / "index"
 
@@ -75,6 +83,8 @@ class SkillForgePaths:
             self.drafts_dir,
             self.output_dir,
             self.blueprints_dir,
+            self.experience_dir,
+            self.promotions_dir,
             self.index_dir,
             self.logs_dir,
             self.db_dir,

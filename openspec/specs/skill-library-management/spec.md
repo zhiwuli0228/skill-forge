@@ -48,15 +48,19 @@ The system SHALL include automated tests for listing, showing, and diffing gener
 - **THEN** it SHALL verify list, empty list, show, missing show, diff, no-difference diff, and missing diff behavior
 
 ### Requirement: Library inspection exposes generation provenance
-The system SHALL expose generation provenance metadata for generated Skill packages when `skill-forge.json` exists.
+The system SHALL expose generation provenance metadata for generated Skill packages when `skill-forge.json` exists, including persisted content quality metrics when they are present.
 
 #### Scenario: Show generated Skill with provenance
 - **WHEN** a user runs `skill-forge show <skill-name>` for a package containing `skill-forge.json`
-- **THEN** the command SHALL display provenance fields including blueprint, LLM usage, quality, and generated timestamp
+- **THEN** the command SHALL display provenance fields including blueprint, LLM usage, quality, content quality metrics when present, and generated timestamp
 
 #### Scenario: Show generated Skill without provenance
 - **WHEN** a user runs `skill-forge show <skill-name>` for a package without `skill-forge.json`
 - **THEN** the command SHALL still display existing package metadata and SHALL indicate missing provenance without failing
+
+#### Scenario: Show generated Skill with content quality metrics
+- **WHEN** a user runs `skill-forge show <skill-name>` for a package whose provenance contains content quality metrics
+- **THEN** the command SHALL display workflow specificity, constraint verifiability, and quality gate clarity values from provenance
 
 ### Requirement: Library diff includes provenance differences
 The system SHALL include provenance metadata differences when comparing generated Skill packages.
@@ -79,6 +83,36 @@ The system SHALL display the latest eval summary for a generated Skill package w
 #### Scenario: Show generated Skill without eval summary
 - **WHEN** a user runs `skill-forge show <skill-name>` for a package without `eval-report.json`
 - **THEN** the command SHALL continue to display generated Skill metadata without failing
+
+### Requirement: Adopted Skills are library packages
+The system SHALL manage adopted Skill packages through the existing generated Skill library commands.
+
+#### Scenario: List adopted package
+- **WHEN** an adopted Skill package exists in the configured output directory
+- **THEN** `skill-forge list` SHALL display it as a library package
+
+#### Scenario: Show adopted package
+- **WHEN** a user runs `skill-forge show <skill-name>` for an adopted package
+- **THEN** the command SHALL display the package metadata and adoption provenance
+
+#### Scenario: Diff adopted package
+- **WHEN** a user runs `skill-forge diff <adopted-skill> <other-skill>`
+- **THEN** the command SHALL compare the adopted package using existing library diff behavior
+
+### Requirement: Library inspection exposes adoption provenance
+The system SHALL display adoption provenance for packages whose `skill-forge.json` identifies an adopted origin.
+
+#### Scenario: Show adoption source
+- **WHEN** a user runs `skill-forge show <skill-name>` for an adopted package
+- **THEN** the command SHALL display the adoption origin, source name, corpus document ID, and adoption timestamp when available
+
+#### Scenario: Show adoption platform
+- **WHEN** an adopted package provenance includes platform metadata
+- **THEN** the command SHALL display that platform metadata with the package details
+
+#### Scenario: Legacy generated package remains compatible
+- **WHEN** a user runs `skill-forge show <skill-name>` for a generated package without adoption provenance
+- **THEN** the command SHALL preserve existing generated package display behavior
 
 ### Requirement: Upgrade candidates are library packages
 The system SHALL manage upgrade candidate packages as generated Skill library packages.

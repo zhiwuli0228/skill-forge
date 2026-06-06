@@ -75,6 +75,36 @@ def test_library_show_reads_generation_provenance(tmp_path: Path) -> None:
     assert entry.provenance.quality_score == 95
 
 
+def test_library_show_reads_adoption_provenance(tmp_path: Path) -> None:
+    skill_dir = _write_skill(tmp_path, "sample", description="Sample skill.")
+    metadata = GenerationProvenanceMetadata(
+        origin_type="community-adopted",
+        generated_at="2026-05-28T00:00:00Z",
+        adopted_at="2026-05-28T00:00:00Z",
+        skill_name="sample",
+        requirement_text="",
+        target_platform="codex",
+        language="unknown",
+        quality_score=90,
+        quality_status="valid_with_warnings",
+        source_name="Community Repo",
+        source_url="https://github.com/example/skills",
+        document_url="https://raw.githubusercontent.com/example/skills/main/sample/SKILL.md",
+        document_id=7,
+        example_id=8,
+        source_platform="codex",
+        content_hash="hash-1",
+    )
+    (skill_dir / "skill-forge.json").write_text(metadata.model_dump_json(indent=2), encoding="utf-8")
+
+    entry = SkillLibraryManager(tmp_path).show("sample")
+
+    assert entry.provenance is not None
+    assert entry.provenance.origin_type == "community-adopted"
+    assert entry.provenance.source_name == "Community Repo"
+    assert entry.provenance.document_id == 7
+
+
 def test_library_show_reads_eval_report(tmp_path: Path) -> None:
     skill_dir = _write_skill(tmp_path, "sample", description="Sample skill.")
     report = SkillEvalReport(skill_name="sample", total=2, passed=1, failed=1)

@@ -4,7 +4,7 @@
 Define how Skill Forge turns natural-language requirements into local Skill packages through deterministic requirement analysis, optional blueprint enrichment, project context constraints, and template rendering.
 ## Requirements
 ### Requirement: Create command generates a local Skill package
-The system SHALL provide a `create` command that generates a local Skill package from a requirement string, either directly in non-interactive mode, after draft confirmation in interactive mode, or with project context when a project path is provided. The command SHALL support optional LLM-assisted requirement refinement only when `--llm` is supplied. When a parsed or refined requirement has a task type matching a built-in Skill blueprint, the system SHALL apply matching blueprint defaults before rendering while preserving user-derived requirement fields. When the user specifies a built-in blueprint with `--blueprint`, the system SHALL apply that blueprint before rendering and SHALL prefer it over automatic task-type matching. After non-interactive generation, the system SHALL validate the generated package and display a quality report.
+The system SHALL provide a `create` command that generates a local Skill package from a requirement string, either directly in non-interactive mode, after draft confirmation in interactive mode, or with project context when a project path is provided. The command SHALL automatically use LLM-assisted requirement field generation for non-interactive generation when LLM configuration is present and available, SHALL support explicit LLM-assisted generation with `--llm`, and SHALL support explicit deterministic generation with `--no-llm`. When a parsed requirement has a task type matching a built-in Skill blueprint, the system SHALL apply matching blueprint defaults before rendering while preserving user-derived requirement fields. When the user specifies a built-in blueprint with `--blueprint`, the system SHALL apply that blueprint before rendering and SHALL prefer it over automatic task-type matching. For LLM-assisted non-interactive generation, the system SHALL apply blueprint defaults before LLM field generation so the LLM can use those defaults as context and fallback content. After non-interactive generation, the system SHALL validate the generated package and display a quality report.
 
 #### Scenario: Requirement string creates SKILL.md
 - **WHEN** a user runs `skill-forge create "Java 存量代码 bug 定位 skill"`
@@ -26,9 +26,36 @@ The system SHALL provide a `create` command that generates a local Skill package
 - **WHEN** post-generation validation reports warnings and no errors
 - **THEN** `skill-forge create "<requirement>"` SHALL exit successfully and display the warnings in the quality report
 
-#### Scenario: LLM-assisted create refines requirement
+#### Scenario: Default create auto-selects LLM after blueprint enrichment
+- **WHEN** a user runs `skill-forge create "<requirement>"`
+- **AND** LLM configuration is present and available
+- **THEN** the system SHALL analyze the requirement and apply matching or explicit blueprint defaults before calling the configured LLM provider
+- **AND** the system SHALL use valid LLM-returned fields before rendering
+
+#### Scenario: Default create falls back to deterministic generation without LLM
+- **WHEN** a user runs `skill-forge create "<requirement>"`
+- **AND** LLM configuration is missing or unavailable
+- **THEN** the system SHALL generate the Skill package through the deterministic path without requiring LLM configuration
+
+#### Scenario: Explicit LLM-assisted create generates fields after blueprint enrichment
 - **WHEN** a user runs `skill-forge create "<requirement>" --llm`
-- **THEN** the system SHALL refine the analyzed requirement through the configured LLM provider before rendering
+- **THEN** the system SHALL analyze the requirement and apply matching or explicit blueprint defaults before calling the configured LLM provider
+- **AND** the system SHALL use valid LLM-returned fields before rendering
+
+#### Scenario: Explicit no-LLM create uses deterministic generation
+- **WHEN** a user runs `skill-forge create "<requirement>" --no-llm`
+- **THEN** the system SHALL generate the Skill package without LLM configuration, availability checks, or LLM field generation
+
+#### Scenario: LLM-assisted create with project context generates fields after project context enrichment
+- **WHEN** a user runs `skill-forge create "<requirement>" --llm --project <path>`
+- **THEN** the system SHALL apply project context constraints before calling the configured LLM provider
+- **AND** the LLM-generated Skill requirement SHALL preserve the project context constraints unless a supported field is validly replaced
+
+#### Scenario: Auto-selected LLM create with project context generates fields after project context enrichment
+- **WHEN** a user runs `skill-forge create "<requirement>" --project <path>`
+- **AND** LLM configuration is present and available
+- **THEN** the system SHALL apply project context constraints before calling the configured LLM provider
+- **AND** the LLM-generated Skill requirement SHALL preserve the project context constraints unless a supported field is validly replaced
 
 #### Scenario: Interactive create enters draft workflow
 - **WHEN** a user runs `skill-forge create "<requirement>" --interactive`
@@ -178,11 +205,53 @@ The system SHALL write a `skill-forge.json` provenance metadata file into each n
 - **WHEN** generation applies an automatic or explicit blueprint
 - **THEN** the metadata SHALL include the applied blueprint ID and source when known
 
+#### Scenario: Metadata records LLM field provenance
+- **WHEN** `skill-forge create "<requirement>" --llm` writes provenance metadata
+- **THEN** the metadata SHALL include fields generated by the LLM, fields that fell back to pre-LLM values, and fields refined by the LLM when known
+
 #### Scenario: Metadata records quality and attachments
 - **WHEN** post-generation validation and quality reporting complete
-- **THEN** the metadata SHALL include quality score, quality status, and generated references, assets, and scripts manifests
+- **THEN** the metadata SHALL include quality score, quality status, content quality metrics when available, and generated references, assets, and scripts manifests
 
 #### Scenario: Metadata avoids full project context
 - **WHEN** generation uses `--project <path>`
 - **THEN** the metadata SHALL store the project path but SHALL NOT store the full project context text
+
+### Requirement: Generation can apply local experience rules
+The system SHALL allow non-interactive generation to apply applicable local experience rules as optional guidance.
+
+#### Scenario: Deterministic generation applies matching rules
+- **WHEN** deterministic generation runs for a requirement with task type matching stored experience rules
+- **THEN** the system SHALL apply relevant rules to improve generated workflow, constraints, or quality gates when the rule can be applied without conflicting with user-provided requirement fields
+
+#### Scenario: LLM-assisted generation applies matching rules
+- **WHEN** LLM-assisted generation runs for a requirement with task type matching stored experience rules
+- **THEN** the system SHALL include applicable rules in the LLM context before field generation
+
+#### Scenario: No experience preserves baseline generation
+- **WHEN** no applicable experience rules exist
+- **THEN** generation SHALL preserve the existing deterministic or LLM-assisted behavior
+
+### Requirement: Generated metadata records experience usage
+The system SHALL record applied experience rule IDs in provenance metadata for generated non-interactive Skill packages.
+
+#### Scenario: Metadata records applied rules
+- **WHEN** generation applies one or more experience rules
+- **THEN** `skill-forge.json` SHALL record the applied experience rule IDs
+
+#### Scenario: Metadata records no applied rules
+- **WHEN** generation completes without applying experience rules
+- **THEN** `skill-forge.json` SHALL record an empty applied experience rule list
+
+### Requirement: Quality metrics support RAG comparison
+The system SHALL expose deterministic content quality metrics that allow LLM-assisted generation with retrieval context to be compared against LLM-assisted generation without retrieval context.
+
+#### Scenario: Compare with and without retrieval context
+- **WHEN** the same requirement is generated through LLM-assisted generation with retrieval context and without retrieval context
+- **THEN** both generated packages SHALL expose workflow specificity, constraint verifiability, and quality gate clarity metrics
+- **AND** those metrics SHALL be usable to compare whether retrieval augmentation improved content quality
+
+#### Scenario: RAG does not change validation scoring rules
+- **WHEN** a generated package was created with retrieval augmentation
+- **THEN** the generation quality report SHALL use the same validation status and deterministic score calculation rules used by non-RAG generation
 

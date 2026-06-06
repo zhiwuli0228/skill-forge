@@ -80,3 +80,64 @@ The generation quality report SHALL include deterministic repair suggestions der
 - **WHEN** non-interactive `create` generates a package with no validation issues
 - **THEN** the quality report output SHALL NOT display an empty suggestions section
 
+### Requirement: Quality reports include content quality metrics
+The generation quality report SHALL include deterministic, rule-backed content quality metrics for generated Skill content when the relevant sections are available. The metrics SHALL include workflow specificity, constraint verifiability, and quality gate clarity as normalized 0.0 through 1.0 scores, and these scores SHALL remain informational rather than validation blockers.
+
+#### Scenario: Report includes minimum content quality metrics
+- **WHEN** `skill-forge create "<requirement>"` generates a Skill package with workflow, constraints, and quality gates
+- **THEN** the quality report SHALL include workflow specificity, constraint verifiability, and quality gate clarity metrics
+
+#### Scenario: Content quality metrics are deterministic
+- **WHEN** the same generated Skill content is evaluated multiple times
+- **THEN** the content quality metrics SHALL be identical
+
+#### Scenario: Content quality metrics do not change validation status
+- **WHEN** content quality metrics are low but post-generation validation has no errors
+- **THEN** the quality report SHALL preserve the validation-derived status
+
+#### Scenario: LLM and deterministic generations can be compared
+- **WHEN** the same requirement is generated with and without `--llm`
+- **THEN** the system SHALL expose content quality metrics for both generated packages so their workflow, constraint, and quality gate quality can be compared
+
+#### Scenario: Report scores are normalized
+- **WHEN** a quality report includes content quality metrics
+- **THEN** each content quality metric SHALL be a numeric score from 0.0 through 1.0
+
+### Requirement: Content quality metrics can feed experience derivation
+The system SHALL make deterministic content quality metrics available as local evidence for experience rule derivation.
+
+#### Scenario: Low workflow score is evidence
+- **WHEN** generated package provenance includes a low workflow specificity score
+- **THEN** experience derivation SHALL be able to use that score as evidence for a workflow-improvement rule
+
+#### Scenario: Low constraint score is evidence
+- **WHEN** generated package provenance includes a low constraint verifiability score
+- **THEN** experience derivation SHALL be able to use that score as evidence for a constraint-improvement rule
+
+#### Scenario: Low quality gate score is evidence
+- **WHEN** generated package provenance includes a low quality gate clarity score
+- **THEN** experience derivation SHALL be able to use that score as evidence for a quality-gate-improvement rule
+
+#### Scenario: Missing content quality is skipped
+- **WHEN** generated package provenance has no content quality metrics
+- **THEN** experience derivation SHALL skip quality evidence for that package without failing
+
+### Requirement: Generated metadata records retrieval augmentation
+The system SHALL record retrieval augmentation status in provenance metadata for generated non-interactive Skill packages when LLM-assisted generation is selected.
+
+#### Scenario: Metadata records used retrieval context
+- **WHEN** `skill-forge create "<requirement>" --llm` completes successfully
+- **AND** retrieval augmentation supplied reference patterns to the LLM request
+- **THEN** `skill-forge.json` SHALL record that retrieval augmentation was used
+- **AND** it SHALL record the referenced Skill names or identifiers
+
+#### Scenario: Metadata records skipped retrieval context
+- **WHEN** LLM-assisted generation completes without retrieval context because the local corpus was empty, insufficient, below quality thresholds, or retrieval failed
+- **THEN** `skill-forge.json` SHALL record that retrieval augmentation was not used
+- **AND** it SHALL record a skipped or fallback reason
+
+#### Scenario: Deterministic generation omits RAG work
+- **WHEN** a user runs `skill-forge create "<requirement>" --no-llm`
+- **THEN** the system SHALL NOT perform retrieval augmentation
+- **AND** generated metadata SHALL NOT claim that retrieval augmentation was used
+

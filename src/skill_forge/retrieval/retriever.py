@@ -78,10 +78,15 @@ class CorpusRetriever:
             )
             results.append(
                 SearchResult(
+                    document_id=document.document_id,
+                    example_id=document.example_id,
                     title=document.title,
                     source_name=document.source_name,
+                    source_url=document.source_url,
+                    document_url=document.document_url,
                     platform=document.platform,
                     summary=document.summary,
+                    quality_score=document.quality_score,
                     score=score,
                     relevance_score=round(float(relevance_score), 6),
                     authority_boost=authority,

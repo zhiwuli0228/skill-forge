@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -6,6 +7,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from skill_forge.adoption.service import (
+    AdoptedSkillExistsError,
+    CorpusDocumentNotFoundError,
+    EmptyCorpusDocumentError,
+    SkillAdoptionService,
+)
+from skill_forge.experience.service import ExperienceService, ExperienceStore
 from skill_forge.blueprints.enricher import BlueprintRequirementEnricher
 from skill_forge.blueprints.loader import (
     BlueprintError,
@@ -14,6 +22,7 @@ from skill_forge.blueprints.loader import (
     DuplicateBlueprintError,
     PROJECT_BLUEPRINTS_RELATIVE_DIR,
 )
+from skill_forge.lifecycle.service import LifecycleService
 from skill_forge.config import DEFAULT_OUTPUT_DIR, load_config, write_default_config
 from skill_forge.generator.skill_generator import SkillGenerator, SkillPackageExistsError
 from skill_forge.evals.runner import EvalCaseError, SkillEvaluator
@@ -24,11 +33,19 @@ from skill_forge.library.manager import (
     GeneratedSkillNotFoundError,
     SkillLibraryManager,
 )
+from skill_forge.lifecycle.promotion import (
+    InvalidPromotionTargetError,
+    PromotionSnapshotNotFoundError,
+    SkillPromotionService,
+)
+from skill_forge.lifecycle.recommendation import LifecycleRecommendationService
 from skill_forge.llm.refiner import (
+    LLMAvailabilityError,
     LLMConfigurationError,
     LLMResponseError,
     OpenAICompatibleLLMClient,
     RequirementLLMRefiner,
+    RequirementLLMRefinementResult,
 )
 from skill_forge.models.quality import GenerationQualityReport, RepairSuggestion, build_generation_quality_report, build_repair_suggestions
 from skill_forge.models.generated import PROVENANCE_METADATA_FILENAME, GenerationProvenanceMetadata
@@ -37,6 +54,7 @@ from skill_forge.research.fetcher import HttpSourceFetcher
 from skill_forge.research.sources import SourceConfigError
 from skill_forge.research.updater import ResearchUpdater, UpdateResult
 from skill_forge.retrieval.indexer import TfidfIndexer, TfidfIndexStore
+from skill_forge.retrieval.generation import GenerationRetrievalAugmenter, GenerationRetrievalContext
 from skill_forge.retrieval.reranker import RerankError, build_reranker
 from skill_forge.retrieval.retriever import CorpusRetriever
 from skill_forge.requirement.analyzer import RequirementAnalyzer
@@ -59,8 +77,25 @@ from skill_forge.validator.skill_validator import SkillValidator
 
 app = typer.Typer(help="Skill Forge CLI.")
 blueprints_app = typer.Typer(help="Inspect built-in Skill blueprints.")
+experience_app = typer.Typer(help="Manage local experience rules.")
+lifecycle_app = typer.Typer(help="Inspect generated Skill lifecycle state.")
 app.add_typer(blueprints_app, name="blueprints")
+app.add_typer(experience_app, name="experience")
+app.add_typer(lifecycle_app, name="lifecycle")
 console = Console()
+
+
+class CreateLLMMode(str, Enum):
+    AUTO = "auto"
+    FORCE = "force"
+    DISABLED = "disabled"
+
+
+class CreateLLMSelection(str, Enum):
+    AUTO_SELECTED = "auto-selected"
+    AUTO_FALLBACK = "auto-fallback"
+    FORCED = "forced"
+    DISABLED = "disabled"
 
 
 @app.callback()
@@ -339,6 +374,71 @@ def search(
     _print_search_result(response.results, explain=explain, retrieval_mode=response.retrieval_mode, warning=rerank_warning)
 
 
+@app.command()
+def adopt(
+    document_id: Annotated[int, typer.Option("--document-id", help="Local corpus document ID to adopt.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Output package name. Does not rewrite adopted SKILL.md content."),
+    ] = None,
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Adopt a cached corpus Skill document into the local Skill library."""
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    write_default_config(paths.config_file)
+    initialize_database(paths.database_file)
+    config = load_config(paths.config_file)
+    output_path = _resolve_output_dir(
+        str(output_dir) if output_dir is not None else config.create.output_dir,
+        paths.home,
+        isolate_default=home is not None and output_dir is None,
+    )
+    service = SkillAdoptionService(
+        output_dir=output_path,
+        corpus_reader=CorpusReader(paths.database_file),
+    )
+
+    try:
+        result = service.adopt(document_id=document_id, name=name)
+    except CorpusDocumentNotFoundError as exc:
+        console.print(f"[red]Cached corpus document not found:[/red] {exc.document_id}")
+        raise typer.Exit(code=1) from exc
+    except EmptyCorpusDocumentError as exc:
+        console.print(f"[red]Cached corpus document has no adoptable Skill content:[/red] {exc.document_id}")
+        raise typer.Exit(code=1) from exc
+    except AdoptedSkillExistsError as exc:
+        console.print(f"[red]Adopted Skill package already exists:[/red] {exc.path}")
+        console.print("Use --name to adopt into a different package name.")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title="Skill package adopted")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Name", result.package.name)
+    table.add_row("Package", str(result.package.path))
+    table.add_row("SKILL.md", str(result.package.skill_md_path))
+    table.add_row("Source", result.source_document.source_name)
+    table.add_row("Document ID", str(result.source_document.document_id))
+    table.add_row("Source URL", result.source_document.document_url or result.source_document.source_url or "-")
+    console.print(table)
+    _print_generation_quality_report(result.quality_report)
+
+    if not result.quality_report.ok:
+        console.print(f"[red]Adopted Skill package is invalid:[/red] {result.package.path}")
+        raise typer.Exit(code=1)
+
+
 @app.command("list")
 def list_generated_skills(
     home: Annotated[
@@ -408,11 +508,42 @@ def show_generated_skill(
     table.add_row("Scripts", str(entry.script_count))
     if entry.provenance is not None:
         provenance = entry.provenance
+        table.add_row("Origin", provenance.origin_type)
+        if provenance.origin_type == "community-adopted":
+            table.add_row("Adopted at", provenance.adopted_at or "-")
+            table.add_row("Source", provenance.source_name or "-")
+            table.add_row("Source URL", provenance.document_url or provenance.source_url or "-")
+            table.add_row("Document ID", str(provenance.document_id) if provenance.document_id is not None else "-")
+            table.add_row("Example ID", str(provenance.example_id) if provenance.example_id is not None else "-")
+            table.add_row("Source platform", provenance.source_platform or "-")
         table.add_row("Generated at", provenance.generated_at)
         table.add_row("Blueprint", provenance.blueprint_id or "-")
         table.add_row("Blueprint source", provenance.blueprint_source or "-")
         table.add_row("LLM enabled", str(provenance.llm_enabled))
+        table.add_row("LLM mode", provenance.llm_mode)
+        table.add_row("LLM selection", provenance.llm_selection)
+        if provenance.llm_fallback_reason:
+            table.add_row("LLM fallback reason", provenance.llm_fallback_reason)
+        if provenance.llm_enabled:
+            table.add_row("LLM generated fields", ", ".join(provenance.llm_generated_fields) or "-")
+            table.add_row("LLM fallback fields", ", ".join(provenance.llm_fallback_fields) or "-")
+            table.add_row("LLM refined fields", ", ".join(provenance.llm_refined_fields) or "-")
+            table.add_row("Retrieval augmented", str(provenance.retrieval_augmented))
+            if provenance.retrieval_augmentation_reason:
+                table.add_row("Retrieval augmentation reason", provenance.retrieval_augmentation_reason)
+            if provenance.retrieval_reference_names:
+                table.add_row("Retrieval references", ", ".join(provenance.retrieval_reference_names))
+        table.add_row("Applied experience rules", ", ".join(provenance.applied_experience_rule_ids) or "-")
         table.add_row("Quality", f"{provenance.quality_score}/100 ({provenance.quality_status})")
+        if provenance.content_quality is not None:
+            table.add_row(
+                "Content quality",
+                (
+                    f"workflow={provenance.content_quality.workflow_specificity:.2f}, "
+                    f"constraints={provenance.content_quality.constraint_verifiability:.2f}, "
+                    f"gates={provenance.content_quality.quality_gate_clarity:.2f}"
+                ),
+            )
         table.add_row("Project context", provenance.project_context_path or "-")
     else:
         table.add_row("Provenance", "missing")
@@ -549,6 +680,93 @@ def upgrade_generated_skill(
     _print_upgrade_result(result)
 
 
+@app.command("promote")
+def promote_generated_skill(
+    candidate_name: Annotated[str, typer.Argument(help="Generated Skill package name to promote.")],
+    target_name: Annotated[
+        str | None,
+        typer.Option("--as", help="Active package name to replace. Defaults to removing the -upgraded suffix."),
+    ] = None,
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Promote a generated candidate Skill package into an active package."""
+    service = _promotion_service(home, output_dir)
+    try:
+        result = service.promote(candidate_name, target_name=target_name)
+    except GeneratedSkillNotFoundError as exc:
+        console.print(f"[red]Generated Skill package not found:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except GeneratedSkillMissingSkillMdError as exc:
+        console.print(f"[red]Generated Skill package is missing SKILL.md:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except InvalidPromotionTargetError as exc:
+        console.print(f"[red]Invalid promotion target:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title="Skill promoted")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Candidate", result.candidate_name)
+    table.add_row("Target", result.target_name)
+    table.add_row("Active version", result.active_version_name)
+    table.add_row("Candidate path", str(result.candidate_path))
+    table.add_row("Target path", str(result.target_path))
+    table.add_row("Previous version", result.previous_version_name or "-")
+    table.add_row("Snapshot", str(result.snapshot_path) if result.snapshot_path is not None else "-")
+    table.add_row("Registry", str(result.registry_path))
+    table.add_row("Promoted at", result.promoted_at)
+    console.print(table)
+
+
+@app.command("rollback")
+def rollback_generated_skill(
+    skill_name: Annotated[str, typer.Argument(help="Active Skill package name to restore.")],
+    version_name: Annotated[str, typer.Option("--to", help="Recorded version label to restore.")],
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Rollback an active Skill package to a previously recorded version."""
+    service = _promotion_service(home, output_dir)
+    try:
+        result = service.rollback(skill_name, version_name=version_name)
+    except PromotionSnapshotNotFoundError as exc:
+        console.print(f"[red]Rollback history not found:[/red] {exc.skill_name} -> {exc.version_name}")
+        console.print(f"Registry: {exc.registry_path}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title="Skill rolled back")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Skill", result.skill_name)
+    table.add_row("Restored version", result.restored_version_name)
+    table.add_row("Active version", result.active_version_name)
+    table.add_row("Target path", str(result.target_path))
+    table.add_row("Previous version", result.previous_version_name or "-")
+    table.add_row("Snapshot", str(result.snapshot_path) if result.snapshot_path is not None else "-")
+    table.add_row("Registry", str(result.registry_path))
+    table.add_row("Rolled back at", result.rolled_back_at)
+    console.print(table)
+
+
 @app.command("diff")
 def diff_generated_skills(
     left: Annotated[str, typer.Argument(help="First generated Skill package name.")],
@@ -605,10 +823,19 @@ def create(
         str | None,
         typer.Option("--blueprint", help="Built-in blueprint id to apply before generation."),
     ] = None,
-    llm: Annotated[bool, typer.Option("--llm", help="Refine the requirement with a configured LLM before generation.")] = False,
+    llm: Annotated[bool, typer.Option("--llm", help="Force LLM-assisted generation.")] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Disable automatic LLM detection and use deterministic generation."),
+    ] = False,
 ) -> None:
     """Generate a local Skill package from a requirement string."""
-    if llm and interactive:
+    if llm and no_llm:
+        console.print("[red]Conflicting options:[/red] use either --llm or --no-llm, not both.")
+        raise typer.Exit(code=1)
+
+    llm_mode = _create_llm_mode(llm=llm, no_llm=no_llm)
+    if llm_mode == CreateLLMMode.FORCE and interactive:
         console.print("[red]LLM-assisted generation is only supported for non-interactive create.[/red]")
         raise typer.Exit(code=1)
 
@@ -623,18 +850,13 @@ def create(
         target_platform=config.create.default_target,
         language=config.create.default_language,
     )
-    if llm:
-        try:
-            skill_requirement = RequirementLLMRefiner(OpenAICompatibleLLMClient.from_env()).refine(
-                requirement,
-                skill_requirement,
-            )
-        except LLMConfigurationError as exc:
-            console.print(f"[red]LLM configuration error:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
-        except LLMResponseError as exc:
-            console.print(f"[red]LLM response error:[/red] {exc}")
-            raise typer.Exit(code=1) from exc
+    experience_service = ExperienceService(ExperienceStore(paths.experience_dir))
+    llm_result: RequirementLLMRefinementResult | None = None
+    retrieval_context: GenerationRetrievalContext | None = None
+    experience_context = None
+    llm_enabled = False
+    llm_selection = CreateLLMSelection.DISABLED if llm_mode == CreateLLMMode.DISABLED else CreateLLMSelection.AUTO_FALLBACK
+    llm_selection_fallback_reason: str | None = None
 
     try:
         skill_requirement = BlueprintRequirementEnricher(_blueprint_loader(home, project)).enrich(
@@ -653,6 +875,59 @@ def create(
     project_summary = None
     if project is not None:
         project_summary = ProjectContextEnricher().enrich(skill_requirement, project)
+
+    skill_requirement, experience_context = experience_service.apply_to_requirement(skill_requirement)
+
+    if not interactive:
+        llm_client = None
+        if llm_mode == CreateLLMMode.DISABLED:
+            llm_selection = CreateLLMSelection.DISABLED
+        elif llm_mode == CreateLLMMode.AUTO and not OpenAICompatibleLLMClient.has_required_env_configuration():
+            llm_selection = CreateLLMSelection.AUTO_FALLBACK
+            missing = ", ".join(OpenAICompatibleLLMClient.missing_env_configuration())
+            llm_selection_fallback_reason = f"Missing LLM configuration: {missing}"
+        else:
+            try:
+                llm_client = OpenAICompatibleLLMClient.from_env()
+                llm_client.check_availability(timeout_seconds=1.0)
+                llm_enabled = True
+                llm_selection = (
+                    CreateLLMSelection.FORCED
+                    if llm_mode == CreateLLMMode.FORCE
+                    else CreateLLMSelection.AUTO_SELECTED
+                )
+            except LLMConfigurationError as exc:
+                if llm_mode == CreateLLMMode.FORCE:
+                    console.print(f"[red]LLM configuration error:[/red] {exc}")
+                    raise typer.Exit(code=1) from exc
+                llm_selection = CreateLLMSelection.AUTO_FALLBACK
+                llm_selection_fallback_reason = str(exc)
+            except LLMAvailabilityError as exc:
+                if llm_mode == CreateLLMMode.FORCE:
+                    console.print(f"[red]LLM availability error:[/red] {exc}")
+                    raise typer.Exit(code=1) from exc
+                llm_selection = CreateLLMSelection.AUTO_FALLBACK
+                llm_selection_fallback_reason = str(exc)
+
+        if llm_client is not None:
+            retrieval_context = _build_generation_retrieval_context(
+                paths=paths,
+                config=config,
+                requirement_text=requirement,
+                skill_requirement=skill_requirement,
+            )
+            try:
+                llm_result = RequirementLLMRefiner(llm_client).refine_with_metadata(
+                    requirement,
+                    skill_requirement,
+                    retrieval_context=retrieval_context,
+                    experience_context=experience_context,
+                )
+            except LLMResponseError as exc:
+                console.print(f"[yellow]LLM response error; using deterministic fallback:[/yellow] {exc}")
+                llm_result = RequirementLLMRefinementResult(requirement=skill_requirement)
+            skill_requirement = llm_result.requirement
+
     output_path = _resolve_output_dir(
         str(output_dir) if output_dir is not None else config.create.output_dir,
         paths.home,
@@ -684,7 +959,7 @@ def create(
 
     attachment_paths = [*package.references, *package.assets, *package.scripts]
     validation_result = SkillValidator().validate(package.path, attachment_paths=attachment_paths)
-    quality_report = build_generation_quality_report(validation_result)
+    quality_report = build_generation_quality_report(validation_result, requirement=skill_requirement)
 
     table = Table(title="Skill package generated")
     table.add_column("Item")
@@ -703,9 +978,15 @@ def create(
         package=package,
         skill_requirement=skill_requirement,
         requirement_text=requirement,
-        llm_enabled=llm,
+        llm_enabled=llm_enabled,
+        llm_mode=llm_mode,
+        llm_selection=llm_selection,
+        llm_selection_fallback_reason=llm_selection_fallback_reason,
         project=project,
         quality_report=quality_report,
+        llm_result=llm_result,
+        retrieval_context=retrieval_context,
+        experience_context=experience_context,
     )
 
 
@@ -773,6 +1054,46 @@ def _library_manager(home: Path | None, output_dir: Path | None = None) -> Skill
     return SkillLibraryManager(output_path)
 
 
+def _experience_service(home: Path | None) -> ExperienceService:
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    return ExperienceService(ExperienceStore(paths.experience_dir))
+
+
+def _lifecycle_service(home: Path | None, output_dir: Path | None = None) -> LifecycleService:
+    paths = SkillForgePaths.resolve(home)
+    config = load_config(paths.config_file)
+    output_path = _resolve_output_dir(
+        str(output_dir) if output_dir is not None else config.create.output_dir,
+        paths.home,
+        isolate_default=home is not None and output_dir is None,
+    )
+    return LifecycleService(
+        SkillLibraryManager(output_path),
+        ExperienceStore(paths.experience_dir),
+    )
+
+
+def _lifecycle_recommendation_service(home: Path | None, output_dir: Path | None = None) -> LifecycleRecommendationService:
+    return LifecycleRecommendationService(_lifecycle_service(home, output_dir))
+
+
+def _promotion_service(home: Path | None, output_dir: Path | None = None) -> SkillPromotionService:
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    write_default_config(paths.config_file)
+    config = load_config(paths.config_file)
+    output_path = _resolve_output_dir(
+        str(output_dir) if output_dir is not None else config.create.output_dir,
+        paths.home,
+        isolate_default=home is not None and output_dir is None,
+    )
+    return SkillPromotionService(
+        SkillLibraryManager(output_path),
+        paths.promotions_dir,
+    )
+
+
 def _blueprint_loader(home: Path | None = None, project: Path | None = None) -> BlueprintLoader:
     paths = SkillForgePaths.resolve(home)
     project_blueprint_dir = None
@@ -782,6 +1103,14 @@ def _blueprint_loader(home: Path | None = None, project: Path | None = None) -> 
         user_blueprint_dir=paths.blueprints_dir,
         project_blueprint_dir=project_blueprint_dir,
     )
+
+
+def _create_llm_mode(*, llm: bool, no_llm: bool) -> CreateLLMMode:
+    if no_llm:
+        return CreateLLMMode.DISABLED
+    if llm:
+        return CreateLLMMode.FORCE
+    return CreateLLMMode.AUTO
 
 
 def _print_duplicate_blueprint_error(exc: DuplicateBlueprintError) -> None:
@@ -796,8 +1125,14 @@ def _write_generation_provenance(
     skill_requirement,
     requirement_text: str,
     llm_enabled: bool,
+    llm_mode: CreateLLMMode,
+    llm_selection: CreateLLMSelection,
+    llm_selection_fallback_reason: str | None,
     project: Path | None,
     quality_report: GenerationQualityReport,
+    llm_result: RequirementLLMRefinementResult | None = None,
+    retrieval_context: GenerationRetrievalContext | None = None,
+    experience_context=None,
 ) -> None:
     metadata = GenerationProvenanceMetadata(
         generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -809,15 +1144,52 @@ def _write_generation_provenance(
         blueprint_id=skill_requirement.applied_blueprint_id,
         blueprint_source=skill_requirement.applied_blueprint_source,
         llm_enabled=llm_enabled,
+        llm_mode=llm_mode.value,
+        llm_selection=llm_selection.value,
+        llm_fallback_reason=(
+            llm_selection_fallback_reason
+            if llm_selection_fallback_reason is not None
+            else (llm_result.fallback_reason if llm_result is not None else None)
+        ),
+        llm_generated_fields=sorted(llm_result.generated_fields) if llm_result is not None else [],
+        llm_fallback_fields=sorted(llm_result.fallback_fields) if llm_result is not None else [],
+        llm_refined_fields=sorted(llm_result.refined_fields) if llm_result is not None else [],
+        retrieval_augmented=retrieval_context.used if retrieval_context is not None else False,
+        retrieval_augmentation_reason=retrieval_context.skipped_reason if retrieval_context is not None else None,
+        retrieval_reference_names=sorted(retrieval_context.source_names) if retrieval_context is not None else [],
+        applied_experience_rule_ids=sorted(experience_context.rule_ids) if experience_context is not None and experience_context.used else [],
         project_context_path=str(project.expanduser().resolve()) if project is not None else None,
         quality_score=quality_report.score,
         quality_status=quality_report.status,
+        content_quality=quality_report.content_quality,
         references=sorted(package.references),
         assets=sorted(package.assets),
         scripts=sorted(package.scripts),
     )
     metadata_path = package.path / PROVENANCE_METADATA_FILENAME
     metadata_path.write_text(metadata.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _build_generation_retrieval_context(
+    *,
+    paths: SkillForgePaths,
+    config,
+    requirement_text: str,
+    skill_requirement,
+) -> GenerationRetrievalContext:
+    try:
+        reader = CorpusReader(paths.database_file)
+        indexer = TfidfIndexer(reader, TfidfIndexStore(paths.index_dir))
+        retriever = CorpusRetriever(indexer)
+        return GenerationRetrievalAugmenter(
+            retriever,
+            top_k=config.retrieval.generation_top_k,
+            min_corpus_documents=config.retrieval.generation_min_corpus_documents,
+            min_relevance_score=config.retrieval.generation_min_relevance_score,
+            min_quality_score=config.retrieval.generation_min_quality_score,
+        ).build_context(requirement_text, platform=skill_requirement.target_platform)
+    except Exception as exc:
+        return GenerationRetrievalContext(skipped_reason=f"retrieval-failed: {exc}")
 
 
 def _format_list(items: list[str]) -> str:
@@ -872,6 +1244,15 @@ def _print_generation_quality_report(report: GenerationQualityReport) -> None:
         console.print(table)
         _print_repair_suggestions(report.repair_suggestions)
 
+    if report.content_quality is not None:
+        metrics_table = Table(title="Content quality")
+        metrics_table.add_column("Metric")
+        metrics_table.add_column("Score")
+        metrics_table.add_row("Workflow specificity", f"{report.content_quality.workflow_specificity:.2f}")
+        metrics_table.add_row("Constraint verifiability", f"{report.content_quality.constraint_verifiability:.2f}")
+        metrics_table.add_row("Quality gate clarity", f"{report.content_quality.quality_gate_clarity:.2f}")
+        console.print(metrics_table)
+
     next_table = Table(title="Next")
     next_table.add_column("Action")
     for action in report.next_actions:
@@ -902,6 +1283,247 @@ def _print_draft_result(draft) -> None:
         table.add_row("Package", str(draft.generated_package.path))
         table.add_row("SKILL.md", str(draft.generated_package.skill_md_path))
     console.print(table)
+
+
+@lifecycle_app.command("show")
+def show_skill_lifecycle(
+    skill_name: Annotated[str, typer.Argument(help="Generated Skill package name to inspect.")],
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Show lifecycle state for a generated Skill package."""
+    service = _lifecycle_service(home, output_dir)
+    try:
+        summary = service.show(skill_name)
+    except GeneratedSkillNotFoundError as exc:
+        console.print(f"[red]Generated Skill package not found:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except GeneratedSkillMissingSkillMdError as exc:
+        console.print(f"[red]Generated Skill package is missing SKILL.md:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"Skill lifecycle: {summary.skill_name}")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Skill", summary.skill_name)
+    table.add_row("Package", str(summary.package_path))
+    table.add_row("State", summary.state)
+    table.add_row("Reason", summary.reason)
+    table.add_row("Quality", f"{summary.quality_score}/100 ({summary.quality_status})" if summary.quality_score is not None else "-")
+    table.add_row(
+        "Eval",
+        f"{summary.eval_passed}/{summary.eval_total} passed, {summary.eval_failed} failed"
+        if summary.eval_total is not None
+        else "-",
+    )
+    table.add_row("Applied experience rules", ", ".join(summary.applied_experience_rule_ids) or "-")
+    table.add_row("Resolved experience rules", ", ".join(summary.resolved_experience_rules) or "-")
+    console.print(table)
+
+    if summary.evidence:
+        evidence_table = Table(title="Lifecycle evidence")
+        evidence_table.add_column("Source", no_wrap=True)
+        evidence_table.add_column("Summary")
+        evidence_table.add_column("Details")
+        for item in summary.evidence:
+            evidence_table.add_row(item.source, item.summary, _format_list(item.details))
+        console.print(evidence_table)
+
+    if summary.missing_facts:
+        missing_table = Table(title="Missing facts")
+        missing_table.add_column("Fact")
+        for fact in summary.missing_facts:
+            missing_table.add_row(fact)
+        console.print(missing_table)
+
+
+@lifecycle_app.command("recommend")
+def recommend_skill_lifecycle(
+    skill_name: Annotated[str, typer.Argument(help="Generated Skill package name to inspect.")],
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Recommend the next lifecycle action for a generated Skill package."""
+    service = _lifecycle_recommendation_service(home, output_dir)
+    try:
+        recommendation = service.recommend(skill_name)
+    except GeneratedSkillNotFoundError as exc:
+        console.print(f"[red]Generated Skill package not found:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except GeneratedSkillMissingSkillMdError as exc:
+        console.print(f"[red]Generated Skill package is missing SKILL.md:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"Lifecycle recommendation: {recommendation.skill_name}")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Skill", recommendation.skill_name)
+    table.add_row("State", recommendation.state)
+    table.add_row("Action", recommendation.action)
+    table.add_row("Reason", recommendation.reason)
+    table.add_row("Signals", _format_list(recommendation.signals))
+    table.add_row("Missing facts", _format_list(recommendation.missing_facts))
+    console.print(table)
+
+
+@lifecycle_app.command("compare")
+def compare_skill_lifecycle(
+    left_skill_name: Annotated[str, typer.Argument(help="First generated Skill package name to compare.")],
+    right_skill_name: Annotated[str, typer.Argument(help="Second generated Skill package name to compare.")],
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Compare two generated Skill lifecycle summaries."""
+    service = _lifecycle_recommendation_service(home, output_dir)
+    try:
+        comparison = service.compare(left_skill_name, right_skill_name)
+    except GeneratedSkillNotFoundError as exc:
+        console.print(f"[red]Generated Skill package not found:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except GeneratedSkillMissingSkillMdError as exc:
+        console.print(f"[red]Generated Skill package is missing SKILL.md:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"Lifecycle comparison: {comparison.left_skill_name} vs {comparison.right_skill_name}")
+    table.add_column("Item")
+    table.add_column("Left")
+    table.add_column("Right")
+    table.add_column("Preferred")
+    table.add_row("State", comparison.left_summary.state, comparison.right_summary.state, comparison.preferred_skill_name)
+    table.add_row(
+        "Quality",
+        f"{comparison.left_summary.quality_score}/100" if comparison.left_summary.quality_score is not None else "-",
+        f"{comparison.right_summary.quality_score}/100" if comparison.right_summary.quality_score is not None else "-",
+        "-",
+    )
+    table.add_row(
+        "Eval",
+        (
+            f"{comparison.left_summary.eval_passed}/{comparison.left_summary.eval_total} passed"
+            if comparison.left_summary.eval_total is not None
+            else "-"
+        ),
+        (
+            f"{comparison.right_summary.eval_passed}/{comparison.right_summary.eval_total} passed"
+            if comparison.right_summary.eval_total is not None
+            else "-"
+        ),
+        "-",
+    )
+    table.add_row("Missing facts", _format_list(comparison.left_summary.missing_facts), _format_list(comparison.right_summary.missing_facts), "-")
+    table.add_row("Reason", comparison.reason, "", "")
+    table.add_row("Tie-breaker", comparison.tie_breaker, "", "")
+    console.print(table)
+
+
+@experience_app.command("list")
+def list_experience_rules(
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+) -> None:
+    """List local experience rules."""
+    service = _experience_service(home)
+    rules = service.list_rules()
+    if not rules:
+        console.print(f"[yellow]No local experience rules found:[/yellow] {service.store.experience_dir}")
+        return
+
+    table = Table(title="Local experience rules")
+    table.add_column("ID", no_wrap=True)
+    table.add_column("Task type", no_wrap=True)
+    table.add_column("Priority", justify="right", no_wrap=True)
+    table.add_column("Scope", no_wrap=True)
+    table.add_column("Rule")
+    for rule in rules:
+        scope = ", ".join(
+            part
+            for part in [
+                f"language={rule.language}" if rule.language else None,
+                f"platform={rule.target_platform}" if rule.target_platform else None,
+            ]
+            if part is not None
+        ) or "-"
+        table.add_row(rule.id, rule.task_type, str(rule.priority), scope, rule.rule_text)
+    console.print(table)
+
+
+@experience_app.command("derive")
+def derive_experience_rules(
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            help="Override the Skill Forge home directory. Primarily useful for tests and isolated runs.",
+        ),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Derive local experience rules from generated Skill packages."""
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    write_default_config(paths.config_file)
+    config = load_config(paths.config_file)
+    output_path = _resolve_output_dir(
+        str(output_dir) if output_dir is not None else config.create.output_dir,
+        paths.home,
+        isolate_default=home is not None and output_dir is None,
+    )
+    service = _experience_service(home)
+    result = service.derive_from_output_dir(output_path, rebuild=True)
+
+    table = Table(title="Experience derivation")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Scanned packages", str(result.scanned_packages))
+    table.add_row("Evidence count", str(result.evidence_count))
+    table.add_row("Skipped packages", ", ".join(result.skipped_packages) or "-")
+    table.add_row("Derived rules", str(len(result.rules)))
+    console.print(table)
+
+    if result.rules:
+        rules_table = Table(title="Derived rules")
+        rules_table.add_column("ID", no_wrap=True)
+        rules_table.add_column("Task type", no_wrap=True)
+        rules_table.add_column("Priority", justify="right", no_wrap=True)
+        rules_table.add_column("Rule")
+        for rule in result.rules:
+            rules_table.add_row(rule.id, rule.task_type, str(rule.priority), rule.rule_text)
+        console.print(rules_table)
 
 
 def _print_update_result(result: UpdateResult) -> None:
@@ -945,9 +1567,10 @@ def _print_search_result(
         return
 
     table = Table(title=f"Search results ({retrieval_mode})")
-    table.add_column("Name / Title")
-    table.add_column("Source")
-    table.add_column("Platform")
+    table.add_column("ID", justify="right", no_wrap=True)
+    table.add_column("Name / Title", no_wrap=True)
+    table.add_column("Source", no_wrap=True)
+    table.add_column("Platform", no_wrap=True)
     table.add_column("Score", justify="right")
     if retrieval_mode == "tfidf+rerank":
         table.add_column("Rerank", justify="right")
@@ -961,6 +1584,7 @@ def _print_search_result(
 
     for result in results:
         row = [
+            str(result.document_id),
             result.title,
             result.source_name,
             result.platform or "unknown",

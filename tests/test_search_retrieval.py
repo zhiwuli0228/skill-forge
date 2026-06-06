@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 from skill_forge.cli import app
 from skill_forge.models.search import SearchResult
 from skill_forge.retrieval.indexer import TfidfIndexer, TfidfIndexStore
+from skill_forge.retrieval.generation import GenerationRetrievalAugmenter
 from skill_forge.retrieval.reranker import RerankError, SearchReranker
 from skill_forge.retrieval.retriever import CorpusRetriever
 from skill_forge.storage.corpus_reader import CorpusReader
@@ -100,8 +101,33 @@ def test_corpus_reader_loads_sqlite_metadata_and_normalized_text(tmp_path: Path)
     assert len(documents) == 1
     assert documents[0].title == "Skill Creator"
     assert documents[0].source_name == "Official Docs"
+    assert documents[0].source_url == "https://example.com/Official Docs"
+    assert documents[0].document_url == "https://example.com/Skill Creator"
     assert documents[0].platform == "codex"
     assert "quality gates" in documents[0].content
+
+
+def test_corpus_reader_loads_single_document_by_id_with_urls(tmp_path: Path) -> None:
+    paths = SkillForgePaths.resolve(tmp_path / "home")
+    seed_document(
+        paths,
+        source_name="Official Docs",
+        authority="official",
+        title="Skill Creator",
+        platform="codex",
+        summary="Create reliable Skills.",
+        content="Skill creator workflow.",
+        content_hash="hash-1",
+    )
+
+    document = CorpusReader(paths.database_file).load_document(1)
+
+    assert document is not None
+    assert document.document_id == 1
+    assert document.example_id == 1
+    assert document.source_url == "https://example.com/Official Docs"
+    assert document.document_url == "https://example.com/Skill Creator"
+    assert CorpusReader(paths.database_file).load_document(999) is None
 
 
 def test_corpus_reader_skips_missing_file_only_when_no_summary(tmp_path: Path) -> None:
@@ -205,6 +231,8 @@ def test_retriever_returns_top_k_relevance_results(tmp_path: Path) -> None:
 
     assert len(results) == 1
     assert results[0].title == "Bug Investigation"
+    assert results[0].document_id == 1
+    assert results[0].example_id == 1
 
 
 def test_retriever_reranks_candidates_without_changing_default_order(tmp_path: Path) -> None:
@@ -328,6 +356,105 @@ def test_retriever_returns_empty_for_empty_corpus(tmp_path: Path) -> None:
     assert results == []
 
 
+def test_generation_retrieval_extracts_quality_gated_patterns(tmp_path: Path) -> None:
+    paths = SkillForgePaths.resolve(tmp_path / "home")
+    seed_document(
+        paths,
+        source_name="Official Docs",
+        authority="official",
+        title="Bug Investigation",
+        platform="codex",
+        summary="Investigate bugs with logs and root cause analysis.",
+        content=(
+            "# Bug Investigation\n\n"
+            "## Workflow\n"
+            "1. Inspect production logs before editing code\n"
+            "2. Trace the failing Java path with stack evidence\n\n"
+            "## Constraints\n"
+            "- Do not change code before root cause evidence is documented\n\n"
+            "## Quality gates\n"
+            "- Pass when root cause evidence links logs to code\n"
+        ),
+        content_hash="hash-1",
+    )
+    augmenter = GenerationRetrievalAugmenter(make_retriever(paths), min_corpus_documents=1)
+
+    context = augmenter.build_context("Java bug investigation logs", platform="codex")
+
+    assert context.used is True
+    assert context.skipped_reason is None
+    assert context.source_names == ["Bug Investigation#1"]
+    assert context.workflow_patterns == [
+        "Inspect production logs before editing code",
+        "Trace the failing Java path with stack evidence",
+    ]
+    assert context.constraint_patterns == ["Do not change code before root cause evidence is documented"]
+    assert context.quality_gate_patterns == ["Pass when root cause evidence links logs to code"]
+
+
+def test_generation_retrieval_skips_empty_insufficient_and_low_quality_corpus(tmp_path: Path) -> None:
+    empty_paths = SkillForgePaths.resolve(tmp_path / "empty")
+    empty_paths.ensure_directories()
+    initialize_database(empty_paths.database_file)
+
+    assert GenerationRetrievalAugmenter(make_retriever(empty_paths)).build_context("skill").skipped_reason == "empty-corpus"
+
+    paths = SkillForgePaths.resolve(tmp_path / "home")
+    seed_document(
+        paths,
+        source_name="Community Notes",
+        authority="community",
+        title="General Skill",
+        platform="codex",
+        summary="General skill guidance.",
+        content="general skill notes",
+        content_hash="hash-1",
+    )
+
+    assert (
+        GenerationRetrievalAugmenter(make_retriever(paths), min_corpus_documents=2)
+        .build_context("general skill")
+        .skipped_reason
+        == "insufficient-corpus"
+    )
+    assert (
+        GenerationRetrievalAugmenter(make_retriever(paths), min_corpus_documents=1, min_quality_score=0.9)
+        .build_context("general skill")
+        .skipped_reason
+        == "below-quality-threshold"
+    )
+
+
+def test_generation_retrieval_limits_and_deduplicates_patterns(tmp_path: Path) -> None:
+    paths = SkillForgePaths.resolve(tmp_path / "home")
+    seed_document(
+        paths,
+        source_name="Official Docs",
+        authority="official",
+        title="Release Skill",
+        platform="codex",
+        summary="Release workflow.",
+        content=(
+            "# Release Skill\n\n"
+            "## Workflow\n"
+            "- Confirm release scope\n"
+            "- Confirm release scope\n"
+            "- Check rollout risks\n\n"
+            "## Constraints\n"
+            "- Rollback evidence must be documented\n\n"
+            "## Quality gates\n"
+            "- Pass when release owner verifies rollback plan\n"
+        ),
+        content_hash="hash-1",
+    )
+    augmenter = GenerationRetrievalAugmenter(make_retriever(paths), min_corpus_documents=1, max_patterns_per_kind=1)
+
+    context = augmenter.build_context("release workflow", platform="codex")
+
+    assert context.used is True
+    assert context.workflow_patterns == ["Confirm release scope"]
+
+
 def test_search_command_displays_results(tmp_path: Path) -> None:
     paths = SkillForgePaths.resolve(tmp_path / "home")
     seed_document(
@@ -348,6 +475,8 @@ def test_search_command_displays_results(tmp_path: Path) -> None:
     assert "Skill Creator" in result.output
     assert "Official Docs" in result.output
     assert "codex" in result.output
+    assert "ID" in result.output
+    assert "1" in result.output
 
 
 def test_search_command_supports_top_k_and_platform(tmp_path: Path) -> None:

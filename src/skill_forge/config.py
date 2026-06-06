@@ -29,6 +29,10 @@ class RetrievalConfig(BaseModel):
     rerank_by_default: bool = False
     rerank_provider: str = "lexical"
     rerank_candidate_multiplier: int = 3
+    generation_top_k: int = 3
+    generation_min_corpus_documents: int = 10
+    generation_min_relevance_score: float = 0.05
+    generation_min_quality_score: float = 0.5
 
 
 class PlatformConfig(BaseModel):

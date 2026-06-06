@@ -1,12 +1,18 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 import skill_forge.cli as cli_module
 from skill_forge.cli import app
+from skill_forge.models.experience import ExperienceRule
+from skill_forge.models.eval import SkillEvalAssertionResult, SkillEvalCaseResult, SkillEvalReport
+from skill_forge.models.generated import GenerationProvenanceMetadata
+from skill_forge.models.quality import ContentQualityMetrics
 from skill_forge.interaction.wizard import QuestionaryPromptAdapter
 from skill_forge.models.validation import ValidationIssue, ValidationResult
+from skill_forge.retrieval.generation import GenerationRetrievalContext
 from skill_forge.storage.sqlite_store import list_tables
 from skill_forge.validator.skill_validator import SkillValidator
 
@@ -17,9 +23,21 @@ runner = CliRunner()
 class FakeLLMClient:
     def __init__(self, response: str) -> None:
         self.response = response
+        self.seen_requirements = []
 
-    def refine_requirement(self, requirement_text, requirement) -> str:
+    def refine_requirement(self, requirement_text, requirement, retrieval_context=None) -> str:
+        self.seen_requirements.append(requirement.model_copy(deep=True))
         return self.response
+
+    def check_availability(self, *, timeout_seconds: float = 1.0) -> None:
+        return None
+
+
+@pytest.fixture(autouse=True)
+def clear_llm_env(monkeypatch):
+    monkeypatch.delenv("SKILL_FORGE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("SKILL_FORGE_LLM_MODEL", raising=False)
+    monkeypatch.delenv("SKILL_FORGE_LLM_BASE_URL", raising=False)
 
 
 def _write_eval_case(
@@ -51,6 +69,58 @@ def _write_eval_case(
         encoding="utf-8",
     )
     return path
+
+
+def _write_experience_source_package(
+    output_dir: Path,
+    name: str,
+    *,
+    generated_at: str,
+    assertion_message: str = "Missing required section: Findings",
+) -> Path:
+    package_dir = output_dir / name
+    package_dir.mkdir(parents=True)
+    (package_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: Sample skill.\n---\n\n# {name}\n\n## Findings\n\nDetails.\n",
+        encoding="utf-8",
+    )
+    provenance = GenerationProvenanceMetadata(
+        generated_at=generated_at,
+        skill_name=name,
+        requirement_text="Java bug investigation skill",
+        target_platform="opencode",
+        language="zh-CN",
+        task_type="bug-investigation",
+        quality_score=70,
+        quality_status="valid_with_warnings",
+        content_quality=ContentQualityMetrics(
+            workflow_specificity=0.2,
+            constraint_verifiability=0.8,
+            quality_gate_clarity=0.9,
+        ),
+    )
+    (package_dir / "skill-forge.json").write_text(provenance.model_dump_json(indent=2), encoding="utf-8")
+    report = SkillEvalReport(
+        skill_name=name,
+        total=1,
+        passed=0,
+        failed=1,
+        results=[
+            SkillEvalCaseResult(
+                case_id="case-1",
+                passed=False,
+                assertions=[
+                    SkillEvalAssertionResult(
+                        passed=False,
+                        assertion="required_sections",
+                        message=assertion_message,
+                    )
+                ],
+            )
+        ],
+    )
+    (package_dir / "eval-report.json").write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    return package_dir
 
 
 def test_help_lists_init_command() -> None:
@@ -123,10 +193,60 @@ def test_create_writes_generation_provenance_metadata(tmp_path: Path) -> None:
     assert metadata["blueprint_id"] == "bug-investigation"
     assert metadata["blueprint_source"] == "builtin"
     assert metadata["llm_enabled"] is False
+    assert metadata["llm_mode"] == "auto"
+    assert metadata["llm_selection"] == "auto-fallback"
+    assert "Missing LLM configuration" in metadata["llm_fallback_reason"]
+    assert metadata["applied_experience_rule_ids"] == []
     assert metadata["quality_score"] == 100
     assert metadata["quality_status"] == "valid"
+    assert "content_quality" in metadata
     assert metadata["references"] == ["references/diagnosis-checklist.md"]
     assert "project_context_summary" not in metadata
+
+
+def test_experience_derive_command_rebuilds_local_rules(tmp_path: Path) -> None:
+    home = tmp_path / "skill-forge-home"
+    output_dir = home / "output"
+    _write_experience_source_package(output_dir, "pkg-a", generated_at="2026-05-31T00:00:00Z")
+    _write_experience_source_package(output_dir, "pkg-b", generated_at="2026-05-31T01:00:00Z")
+    _write_experience_source_package(output_dir, "pkg-c", generated_at="2026-05-31T02:00:00Z")
+
+    result = runner.invoke(app, ["experience", "derive", "--home", str(home)])
+
+    assert result.exit_code == 0
+    assert "Experience derivation" in result.output
+    assert "Derived rules" in result.output
+    assert list((home / "experience").glob("*.json"))
+
+
+def test_create_records_and_shows_applied_experience_rules(tmp_path: Path) -> None:
+    home = tmp_path / "skill-forge-home"
+    experience_dir = home / "experience"
+    experience_dir.mkdir(parents=True)
+    rule = ExperienceRule(
+        id="experience-123",
+        task_type="bug-investigation",
+        language="zh-CN",
+        target_platform="opencode",
+        priority=80,
+        rule_text="For bug-investigation, confirm logs before code changes.",
+        workflow_guidance=["Confirm logs before code changes."],
+        constraint_guidance=["Do not change code before logs are reviewed."],
+        quality_gate_guidance=["Pass only when logs are linked to the root cause."],
+        evidence=[],
+        derived_at="2026-05-31T00:00:00Z",
+    )
+    (experience_dir / f"{rule.id}.json").write_text(rule.model_dump_json(indent=2), encoding="utf-8")
+
+    result = runner.invoke(app, ["create", "Java 存量代码 bug 定位 skill", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "java-bug-investigation" / "skill-forge.json").read_text(encoding="utf-8"))
+    show_result = runner.invoke(app, ["show", "java-bug-investigation", "--home", str(home)])
+
+    assert result.exit_code == 0
+    assert metadata["applied_experience_rule_ids"] == [rule.id]
+    assert "Applied experience rules" in show_result.output
+    assert rule.id in show_result.output
 
 
 def test_create_output_dir_overrides_configured_output_directory(tmp_path: Path) -> None:
@@ -143,15 +263,35 @@ def test_create_output_dir_overrides_configured_output_directory(tmp_path: Path)
     assert not (home / "output" / "java-bug-investigation").exists()
 
 
-def test_create_without_llm_does_not_require_llm_configuration(tmp_path: Path, monkeypatch) -> None:
+def test_create_without_llm_does_not_require_llm_configuration(tmp_path: Path) -> None:
     home = tmp_path / "skill-forge-home"
-    monkeypatch.delenv("SKILL_FORGE_LLM_API_KEY", raising=False)
-    monkeypatch.delenv("SKILL_FORGE_LLM_MODEL", raising=False)
 
     result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--home", str(home)])
 
     assert result.exit_code == 0
     assert (home / "output" / "custom-skill" / "SKILL.md").is_file()
+
+
+def test_create_without_llm_uses_configured_llm_by_default(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    client = FakeLLMClient(
+        '{"description": "Use this skill for release readiness checks.", '
+        '"workflow": ["Confirm release scope", "Check rollout risks"]}'
+    )
+    monkeypatch.setenv("SKILL_FORGE_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("SKILL_FORGE_LLM_MODEL", "test-model")
+    monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", lambda: client)
+
+    result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "custom-skill" / "skill-forge.json").read_text(encoding="utf-8"))
+    content = (home / "output" / "custom-skill" / "SKILL.md").read_text(encoding="utf-8")
+    assert result.exit_code == 0
+    assert "Use this skill for release readiness checks." in content
+    assert metadata["llm_enabled"] is True
+    assert metadata["llm_mode"] == "auto"
+    assert metadata["llm_selection"] == "auto-selected"
+    assert metadata["llm_generated_fields"] == ["workflow"]
 
 
 def test_create_with_llm_refines_requirement(tmp_path: Path, monkeypatch) -> None:
@@ -175,10 +315,111 @@ def test_create_with_llm_refines_requirement(tmp_path: Path, monkeypatch) -> Non
     assert "Confirm release scope" in content
 
 
+def test_create_with_llm_uses_blueprint_before_generation(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    client = FakeLLMClient(
+        '{"workflow": ["Inspect the Java stack trace before changing code"], '
+        '"quality_gates": ["Pass when root cause evidence is linked to the failing Java path"]}'
+    )
+    monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", lambda: client)
+
+    result = runner.invoke(app, ["create", "Java 存量代码 bug 定位 skill", "--llm", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "java-bug-investigation" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert client.seen_requirements[0].applied_blueprint_id == "bug-investigation"
+    assert client.seen_requirements[0].workflow
+    assert metadata["llm_generated_fields"] == ["quality_gates", "workflow"]
+    assert metadata["llm_fallback_fields"] == []
+    assert metadata["content_quality"]["workflow_specificity"] >= 0
+
+
+def test_create_with_llm_uses_project_context_before_generation(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("This project uses OpenSpec changes and pytest tests.", encoding="utf-8")
+    client = FakeLLMClient("{}")
+    monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", lambda: client)
+
+    result = runner.invoke(
+        app,
+        ["create", "整理团队发布流程 skill", "--llm", "--project", str(project), "--home", str(home)],
+    )
+
+    assert result.exit_code == 0
+    assert any("Project constraint:" in constraint for constraint in client.seen_requirements[0].constraints)
+
+
+def test_create_with_llm_records_used_retrieval_augmentation(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    retrieval_context = GenerationRetrievalContext(
+        used=True,
+        source_names=["Bug Investigation#1"],
+        workflow_patterns=["Inspect logs before editing code"],
+        constraint_patterns=["Do not change code before evidence is documented"],
+        quality_gate_patterns=["Pass when evidence links logs to code"],
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "_build_generation_retrieval_context",
+        lambda **kwargs: retrieval_context,
+    )
+    monkeypatch.setattr(
+        cli_module.OpenAICompatibleLLMClient,
+        "from_env",
+        lambda: FakeLLMClient('{"workflow": ["Inspect application logs before editing code"]}'),
+    )
+
+    result = runner.invoke(app, ["create", "Java 存量代码 bug 定位 skill", "--llm", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "java-bug-investigation" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert metadata["retrieval_augmented"] is True
+    assert metadata["retrieval_augmentation_reason"] is None
+    assert metadata["retrieval_reference_names"] == ["Bug Investigation#1"]
+
+
+def test_create_with_llm_records_skipped_retrieval_augmentation(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    monkeypatch.setattr(
+        cli_module,
+        "_build_generation_retrieval_context",
+        lambda **kwargs: GenerationRetrievalContext(skipped_reason="empty-corpus"),
+    )
+    monkeypatch.setattr(
+        cli_module.OpenAICompatibleLLMClient,
+        "from_env",
+        lambda: FakeLLMClient('{"workflow": ["Confirm release scope"]}'),
+    )
+
+    result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--llm", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "custom-skill" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert metadata["retrieval_augmented"] is False
+    assert metadata["retrieval_augmentation_reason"] == "empty-corpus"
+    assert metadata["retrieval_reference_names"] == []
+
+
+def test_create_no_llm_does_not_build_retrieval_context(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+
+    def fail_retrieval_context(**kwargs):
+        raise AssertionError("retrieval augmentation should not run")
+
+    monkeypatch.setattr(cli_module, "_build_generation_retrieval_context", fail_retrieval_context)
+
+    result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--no-llm", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "custom-skill" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert metadata["retrieval_augmented"] is False
+    assert metadata["retrieval_augmentation_reason"] is None
+
+
 def test_create_with_llm_reports_missing_configuration(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "skill-forge-home"
-    monkeypatch.delenv("SKILL_FORGE_LLM_API_KEY", raising=False)
-    monkeypatch.delenv("SKILL_FORGE_LLM_MODEL", raising=False)
 
     result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--llm", "--home", str(home)])
 
@@ -187,15 +428,68 @@ def test_create_with_llm_reports_missing_configuration(tmp_path: Path, monkeypat
     assert "SKILL_FORGE_LLM_API_KEY" in result.output
 
 
-def test_create_with_llm_reports_bad_response(tmp_path: Path, monkeypatch) -> None:
+def test_create_with_llm_reports_unavailable_provider(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+
+    class UnavailableLLMClient(FakeLLMClient):
+        def check_availability(self, *, timeout_seconds: float = 1.0) -> None:
+            raise cli_module.LLMAvailabilityError("provider unavailable")
+
+    monkeypatch.setenv("SKILL_FORGE_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("SKILL_FORGE_LLM_MODEL", "test-model")
+    monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", lambda: UnavailableLLMClient("{}"))
+
+    result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--llm", "--home", str(home)])
+
+    assert result.exit_code == 1
+    assert "LLM availability error" in result.output
+    assert "provider unavailable" in result.output
+
+
+def test_create_no_llm_bypasses_detection(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "skill-forge-home"
+    monkeypatch.setenv("SKILL_FORGE_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("SKILL_FORGE_LLM_MODEL", "test-model")
+
+    def fail_from_env():
+        raise AssertionError("LLM client should not be constructed")
+
+    monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", fail_from_env)
+
+    result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--no-llm", "--home", str(home)])
+
+    metadata = json.loads((home / "output" / "custom-skill" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert metadata["llm_enabled"] is False
+    assert metadata["llm_mode"] == "disabled"
+    assert metadata["llm_selection"] == "disabled"
+    assert metadata["llm_fallback_reason"] is None
+
+
+def test_create_rejects_conflicting_llm_flags(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["create", "整理团队发布流程 skill", "--llm", "--no-llm", "--home", str(tmp_path / "home")],
+    )
+
+    assert result.exit_code == 1
+    assert "Conflicting options" in result.output
+
+
+def test_create_with_llm_falls_back_on_bad_response(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "skill-forge-home"
     monkeypatch.setattr(cli_module.OpenAICompatibleLLMClient, "from_env", lambda: FakeLLMClient("not-json"))
 
     result = runner.invoke(app, ["create", "整理团队发布流程 skill", "--llm", "--home", str(home)])
 
-    assert result.exit_code == 1
-    assert "LLM response error" in result.output
-    assert "not valid JSON" in result.output
+    metadata = json.loads((home / "output" / "custom-skill" / "skill-forge.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert (home / "output" / "custom-skill" / "SKILL.md").is_file()
+    assert metadata["llm_enabled"] is True
+    assert metadata["llm_mode"] == "force"
+    assert metadata["llm_selection"] == "forced"
+    assert "not valid JSON" in metadata["llm_fallback_reason"]
+    assert metadata["llm_fallback_fields"]
 
 
 def test_create_rejects_llm_with_interactive(tmp_path: Path) -> None:
@@ -345,6 +639,8 @@ def test_show_command_displays_generated_skill_metadata(tmp_path: Path) -> None:
     assert "Blueprint" in result.output
     assert "bug-investigation" in result.output
     assert "Quality" in result.output
+    assert "Content quality" in result.output
+    assert "workflow=" in result.output
 
 
 def test_show_command_displays_eval_summary_when_present(tmp_path: Path) -> None:
