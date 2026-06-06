@@ -308,8 +308,10 @@ future change" rule.
 
 ## 16. Commit SHA
 
-The Phase 7 change is committed as `<see git log>`
-with the message
+The Phase 7 change is committed as `904abef`
+(short SHA; full SHA:
+`904abefcd734eca7a2896a762a55e9037be44984`) with
+the message
 `docs: bulk import pre-existing wip`. A follow-up
 docs commit records the SHA in this report and in
 `openspec/changes/bulk-import-pre-existing-wip/verification.md`.
