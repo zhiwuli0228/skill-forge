@@ -350,9 +350,13 @@ additive, documentation-only normalization.
 
 ## 16. Commit SHA
 
-The Phase 6 change is committed as `<see git log>`
-with the message
-`docs: triage dirty worktree change queue`. A
-follow-up docs commit records the SHA in this
-report and in
+The Phase 6 change is committed as `351cc7e` (short
+SHA; full SHA: see `git show 351cc7e`) with the
+message `docs: triage dirty worktree change queue`.
+The commit was prepared with explicit
+`git add <path>` commands for each of the 12 Phase 6
+paths; no `git add .` or `git add -A` was used. The
+pre-existing dirty worktree is preserved untouched
+and is not included in the commit. A follow-up docs
+commit records the SHA in this report and in
 `openspec/changes/triage-dirty-worktree-change-queue/verification.md`.
