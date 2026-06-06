@@ -652,6 +652,7 @@ add-skill-library-management
 5. 资料库质量增强：补充 source freshness、失败重试、来源评分解释和更清晰的 update 报告。
 6. 检索增强：在保持 TF-IDF 默认路径的前提下，探索可选向量检索或 rerank。
 7. Web UI：在 CLI 能力稳定后，考虑为可视化编辑和比较 Skill 提供界面。
+8. Skill 生命周期治理：把 provenance、eval、upgrade、experience 和回滚统一成生命周期视图与推荐流程，详见 `docs/skill_lifecycle_governance_plan.md`。
 
 ## 12. 文档维护说明
 

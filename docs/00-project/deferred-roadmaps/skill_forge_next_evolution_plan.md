@@ -772,3 +772,13 @@ add-skill-upgrade-workflow
 5. 如有命令变化，补充 CLI 示例和测试命令。
 
 如果文档冲突，以当前 CLI 行为、已归档 OpenSpec specs 和测试为优先事实源。
+
+## 11. 新的后续方向
+
+当前这份文档中的下一阶段能力已经具备较清晰的依赖顺序。等这一轮继续推进完之后，新的主线建议切换到：
+
+```text
+docs/skill_lifecycle_governance_plan.md
+```
+
+它会把 provenance、eval、upgrade、experience 和回滚整合成生命周期治理层，避免继续只在生成层做增量。
