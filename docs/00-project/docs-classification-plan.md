@@ -231,3 +231,13 @@ delete, no rewrite. The verification floor is
 `git status --short` to confirm the moves landed and no
 unintended path was touched. The user explicitly authorizes the
 move with the standing "push after every future change" rule.
+
+## Migration Execution Status
+
+| Batch | Description | Status |
+|---|---|---|
+| Batch 1 | Safe moves (openspec_change_plan, intelligent-generation-design, 7 taskbooks) | Completed (commit `31820f3`) |
+| Batch 2 | Summarize-then-archive (skill_forge_design_doc, skill_lifecycle_governance_plan) | Completed |
+| Batch 3 | Conservative migration (4 deferred roadmaps, release-notes) | Completed |
+
+**Remaining action:** Keep docs root clean. Future docs must follow `docs/README.md` placement rules.

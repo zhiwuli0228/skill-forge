@@ -34,3 +34,14 @@ Use this order when looking for project truth:
 - Do not mix phase reports with architecture or domain authority.
 - Do not move existing documents without a separate cleanup change.
 - Historical documents should move to `99-archive/` only after they are replaced by current authority documents.
+
+## Migrated Legacy Documents
+
+After the Batch 1–3 documentation cleanup, all legacy root-level documents have been relocated:
+
+- **Historical design drafts** now live under `docs/99-archive/old-designs/`.
+- **Historical taskbooks** now live under `docs/99-archive/taskbooks/`.
+- **Deferred roadmap documents** now live under `docs/00-project/deferred-roadmaps/`.
+- **Release notes** live under `docs/00-project/release-notes.md`.
+- **`docs/00-project/docs-classification-plan.md`** records the migration plan.
+- **`docs/00-project/docs-cleanup-verification-report.md`** records the final cleanup verification.
