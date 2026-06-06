@@ -109,6 +109,10 @@ The split between the pure rules and the service adapter is the single most impo
 
 Any change that erodes the split is a regression, not a refactor.
 
+## Historical Context
+
+The lifecycle subsystem was delivered through three progressive OpenSpec changes, all archived: `add-skill-lifecycle-index`, `add-skill-lifecycle-recommendation`, `add-skill-promotion-and-rollback` (see `docs/99-archive/superseded-roadmaps/skill_lifecycle_governance_plan.md`). The original design principles still apply: deterministic over LLM, one main user behavior per change, every recommendation explainable from provenance / eval / quality / experience, and promote / rollback must preserve the original fact sources. The current rules refine those principles into the pure-rule / service-adapter split documented above.
+
 ## Related Files
 
 - `docs/06-domain/skill-authoring-domain.md` — Skill package concept, provenance.

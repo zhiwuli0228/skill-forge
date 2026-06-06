@@ -64,6 +64,10 @@ The following invariants are architecture-level and must not change without a no
 - The Agent entry-point set: `AGENTS.md`, `CODEX.md`, `CLAUDE.md`, `OPENCODE.md`, `SUPERPOWERS.md` are required for any non-trivial change.
 - The governance directory layout: `openspec/`, `docs/03-openspec/`, `docs/04-superpowers/` are the only governance authorities.
 
+## Historical Context
+
+The original design (archived as `docs/99-archive/old-designs/skill_forge_design_doc.md`) organized the system as 12 purpose-named modules: `cli`, `config`, `requirement`, `interaction`, `project_context`, `research`, `corpus`, `retrieval`, `generator`, `validator`, `installer`, `storage`. The current 7-layer model consolidates those modules into the runtime layers plus a peer governance layer, and adds `lifecycle`, `adoption`, `experience`, `library`, `evals`, and `upgrade` as runtime subsystems delivered after the original design. The original motivating problems (cross-platform Skill inconsistency, drifting best practices, incomplete user requirements, hand-written Skills missing structure, unstable LLM-only output, and project-context-dependent Skills) remain the system's reason for existing.
+
 ## Related Files
 
 - `docs/01-architecture/module-boundaries.md` — which module owns what.
