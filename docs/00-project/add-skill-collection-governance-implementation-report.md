@@ -186,9 +186,10 @@ The implementation commit SHA is recorded in
 §9 after commit. A follow-up docs commit may
 update this report to record the SHA exactly.
 
-## 9. Commit SHA (filled after commit)
+## 9. Commit SHA
 
 - Implementation commit: `9351f8e90309f50d6dcfc5499ae351fd3ef73a55`
   (short: `9351f8e`), message
   `feat: add governed skill collection slice`.
-- Follow-up docs commit: TBD (this report update).
+- Follow-up docs commit: `75e4bc9`, message
+  `docs: record add-skill-collection-governance commit SHA`.
