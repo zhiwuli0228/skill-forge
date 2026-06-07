@@ -188,5 +188,7 @@ update this report to record the SHA exactly.
 
 ## 9. Commit SHA (filled after commit)
 
-- Implementation commit: TBD
-- Follow-up docs commit (if any): TBD
+- Implementation commit: `9351f8e90309f50d6dcfc5499ae351fd3ef73a55`
+  (short: `9351f8e`), message
+  `feat: add governed skill collection slice`.
+- Follow-up docs commit: TBD (this report update).
