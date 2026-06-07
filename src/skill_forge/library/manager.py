@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from skill_forge.models.eval import EVAL_REPORT_FILENAME, SkillEvalReport
 from skill_forge.models.generated import PROVENANCE_METADATA_FILENAME, GenerationProvenanceMetadata
 from skill_forge.models.library import SkillLibraryEntry
+from skill_forge.storage.collection_store import CollectionStore
 
 
 class GeneratedSkillNotFoundError(RuntimeError):
@@ -27,8 +28,9 @@ class GeneratedSkillMissingSkillMdError(RuntimeError):
 
 
 class SkillLibraryManager:
-    def __init__(self, output_dir: Path) -> None:
+    def __init__(self, output_dir: Path, collection_store: CollectionStore | None = None) -> None:
         self._output_dir = output_dir.expanduser()
+        self._collection_store = collection_store
 
     @property
     def output_dir(self) -> Path:
@@ -74,6 +76,9 @@ class SkillLibraryManager:
     def _entry_from_path(self, path: Path) -> SkillLibraryEntry:
         skill_md_path = path / "SKILL.md"
         post = frontmatter.loads(skill_md_path.read_text(encoding="utf-8"))
+        collection_record = None
+        if self._collection_store is not None:
+            collection_record = self._collection_store.read_record(path.name)
         return SkillLibraryEntry(
             name=path.name,
             frontmatter_name=_metadata_string(post.metadata.get("name")),
@@ -85,6 +90,7 @@ class SkillLibraryManager:
             script_count=_count_files(path / "scripts"),
             provenance=_read_provenance(path),
             eval_report=_read_eval_report(path),
+            collection_record=collection_record,
         )
 
 

@@ -330,9 +330,65 @@ Optionally rerank TF-IDF candidates with the built-in offline lexical reranker:
 uv run skill-forge search "skill creator" --rerank
 ```
 
-Search output identifies the retrieval mode, such as `tfidf` or `tfidf+rerank`. If rerank is disabled or unavailable, search falls back to TF-IDF and prints a warning.
+Filter by collection state:
+
+```bash
+uv run skill-forge search "skill creator" --collection promoted
+```
+
+Boost promoted Skills in ranking:
+
+```bash
+uv run skill-forge search "skill creator" --promoted-boost
+```
+
+Use optional semantic retrieval mode (local TF-IDF similarity):
+
+```bash
+uv run skill-forge search "skill creator" --semantic
+```
+
+Search output identifies the retrieval mode, such as `tfidf`, `tfidf+rerank`, or `semantic-tfidf`. If rerank is disabled or unavailable, search falls back to TF-IDF and prints a warning. If semantic mode is unavailable, it falls back to default retrieval.
 
 If the corpus is empty, run `skill-forge update` first.
+
+### `collection`
+
+Manages governed collection states for local Skills.
+
+Score a Skill to create or update its collection record:
+
+```bash
+uv run skill-forge collection score <skill-name>
+```
+
+List all collection records:
+
+```bash
+uv run skill-forge collection list
+```
+
+Filter by collection state:
+
+```bash
+uv run skill-forge collection list --state promoted
+```
+
+Show collection details for a Skill:
+
+```bash
+uv run skill-forge collection show <skill-id>
+```
+
+Update the collection state manually:
+
+```bash
+uv run skill-forge collection update <skill-id> --state curated --rationale "High quality evidence"
+```
+
+Valid collection states: `candidate`, `curated`, `promoted`, `rejected`.
+
+Collected Skills are examples with governance metadata, not blueprint templates. Adoption does not auto-promote Skills; state changes require explicit scoring or manual override.
 
 ### `list`
 
@@ -431,6 +487,10 @@ The default workspace is:
 ~/.skill-forge/
 ├── config.yaml
 ├── sources.yaml
+├── collections/
+│   ├── manifests/
+│   ├── snapshots/
+│   └── indexes/
 ├── corpus/
 │   ├── raw/
 │   └── normalized/
@@ -553,10 +613,15 @@ Implemented:
 - Optional LLM-assisted requirement refinement.
 - Generated Skill library commands: `list`, `show`, `diff`, and eval summary display.
 - Upgrade candidate generation with `upgrade`.
+- Skill collection governance with `candidate`, `curated`, `promoted`, and `rejected` states.
+- Deterministic collection scoring from validation, quality, eval, lifecycle, provenance, and reuse signals.
+- Collection-aware search filtering and promoted-boost ranking.
+- Promoted reference preference in generation and experience accumulation.
+- Optional local semantic retrieval with `--semantic` flag.
 
 Not implemented:
 
 - Web UI.
 - Background scheduled updates.
-- Vector database retrieval.
+- Remote vector database retrieval.
 - Automatic in-place Skill replacement or remote migration.

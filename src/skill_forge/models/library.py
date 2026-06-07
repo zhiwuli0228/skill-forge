@@ -2,6 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from skill_forge.models.collection import CollectionRecord
 from skill_forge.models.eval import SkillEvalReport
 from skill_forge.models.generated import GenerationProvenanceMetadata
 
@@ -17,3 +18,4 @@ class SkillLibraryEntry(BaseModel):
     script_count: int = 0
     provenance: GenerationProvenanceMetadata | None = None
     eval_report: SkillEvalReport | None = None
+    collection_record: CollectionRecord | None = None

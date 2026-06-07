@@ -66,6 +66,10 @@ class SkillForgePaths:
         return self.home / "logs"
 
     @property
+    def collections_dir(self) -> Path:
+        return self.home / "collections"
+
+    @property
     def db_dir(self) -> Path:
         return self.home / "db"
 
@@ -87,6 +91,7 @@ class SkillForgePaths:
             self.promotions_dir,
             self.index_dir,
             self.logs_dir,
+            self.collections_dir,
             self.db_dir,
         )
 

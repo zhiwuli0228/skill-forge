@@ -336,9 +336,65 @@ uv run skill-forge search "skill creator" --platform codex --explain
 uv run skill-forge search "skill creator" --rerank
 ```
 
-Search 输出会标识检索模式，例如 `tfidf` 或 `tfidf+rerank`。如果 rerank 被配置禁用或不可用，search 会回退到 TF-IDF 并打印 warning。
+按 collection 状态过滤：
+
+```bash
+uv run skill-forge search "skill creator" --collection promoted
+```
+
+提升 promoted Skills 的排序权重：
+
+```bash
+uv run skill-forge search "skill creator" --promoted-boost
+```
+
+使用可选的语义检索模式（本地 TF-IDF 相似度）：
+
+```bash
+uv run skill-forge search "skill creator" --semantic
+```
+
+Search 输出会标识检索模式，例如 `tfidf`、`tfidf+rerank` 或 `semantic-tfidf`。如果 rerank 被配置禁用或不可用，search 会回退到 TF-IDF 并打印 warning。如果语义模式不可用，会回退到默认检索。
 
 如果本地资料库为空，先运行 `skill-forge update`。
+
+### `collection`
+
+管理本地 Skill 的 collection 治理状态。
+
+对 Skill 运行评分以创建或更新 collection 记录：
+
+```bash
+uv run skill-forge collection score <skill-name>
+```
+
+列出所有 collection 记录：
+
+```bash
+uv run skill-forge collection list
+```
+
+按 collection 状态过滤：
+
+```bash
+uv run skill-forge collection list --state promoted
+```
+
+查看 Skill 的 collection 详情：
+
+```bash
+uv run skill-forge collection show <skill-id>
+```
+
+手动更新 collection 状态：
+
+```bash
+uv run skill-forge collection update <skill-id> --state curated --rationale "High quality evidence"
+```
+
+有效的 collection 状态：`candidate`、`curated`、`promoted`、`rejected`。
+
+Collected Skills 是带有治理元数据的示例，不是蓝图模板。Adoption 不会自动提升 Skill 状态；状态变更需要显式评分或手动覆盖。
 
 ### `list`
 
@@ -437,6 +493,10 @@ platforms:
 ~/.skill-forge/
 ├── config.yaml
 ├── sources.yaml
+├── collections/
+│   ├── manifests/
+│   ├── snapshots/
+│   └── indexes/
 ├── corpus/
 │   ├── raw/
 │   └── normalized/
@@ -559,10 +619,15 @@ src/skill_forge/
 - 可选 LLM 辅助需求精炼。
 - 已生成 Skill 包管理命令：`list`、`show`、`diff`，以及 eval 摘要展示。
 - 使用 `upgrade` 生成升级候选 Skill。
+- Skill collection 治理，支持 `candidate`、`curated`、`promoted`、`rejected` 状态。
+- 基于 validation、quality、eval、lifecycle、provenance 和 reuse 信号的确定性 collection scoring。
+- Collection 感知的搜索过滤和 promoted-boost 排序。
+- 在 generation 和 experience 积累中优先选择 promoted references。
+- 通过 `--semantic` 标志使用可选的本地语义检索。
 
 暂未实现：
 
 - Web UI。
 - 后台定时更新。
-- 向量数据库检索。
+- 远程向量数据库检索。
 - 自动原地替换 Skill 或远程迁移。

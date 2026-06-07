@@ -15,6 +15,14 @@ from skill_forge.adoption.service import (
 )
 from skill_forge.experience.service import ExperienceService, ExperienceStore
 from skill_forge.blueprints.enricher import BlueprintRequirementEnricher
+from skill_forge.lifecycle.scoring import (
+    ScoringConfig,
+    ScoringInputs,
+    compute_scores,
+    suggested_state,
+)
+from skill_forge.models.collection import CollectionState, build_collection_record
+from skill_forge.storage.collection_store import CollectionStore
 from skill_forge.blueprints.loader import (
     BlueprintError,
     BlueprintLoader,
@@ -23,7 +31,7 @@ from skill_forge.blueprints.loader import (
     PROJECT_BLUEPRINTS_RELATIVE_DIR,
 )
 from skill_forge.lifecycle.service import LifecycleService
-from skill_forge.config import DEFAULT_OUTPUT_DIR, load_config, write_default_config
+from skill_forge.config import AppConfig, DEFAULT_OUTPUT_DIR, load_config, write_default_config
 from skill_forge.generator.skill_generator import SkillGenerator, SkillPackageExistsError
 from skill_forge.evals.runner import EvalCaseError, SkillEvaluator
 from skill_forge.interaction.wizard import SkillCreationWizard
@@ -79,9 +87,11 @@ app = typer.Typer(help="Skill Forge CLI.")
 blueprints_app = typer.Typer(help="Inspect built-in Skill blueprints.")
 experience_app = typer.Typer(help="Manage local experience rules.")
 lifecycle_app = typer.Typer(help="Inspect generated Skill lifecycle state.")
+collection_app = typer.Typer(help="Manage Skill collection governance.")
 app.add_typer(blueprints_app, name="blueprints")
 app.add_typer(experience_app, name="experience")
 app.add_typer(lifecycle_app, name="lifecycle")
+app.add_typer(collection_app, name="collection")
 console = Console()
 
 
@@ -333,6 +343,18 @@ def search(
         bool,
         typer.Option("--rerank", help="Rerank TF-IDF candidates with the configured local reranker."),
     ] = False,
+    collection: Annotated[
+        str | None,
+        typer.Option("--collection", help="Filter results by collection state (candidate, curated, promoted, rejected)."),
+    ] = None,
+    promoted_boost: Annotated[
+        bool,
+        typer.Option("--promoted-boost", help="Boost promoted Skills in ranking."),
+    ] = False,
+    semantic: Annotated[
+        bool,
+        typer.Option("--semantic", help="Use semantic retrieval mode (local TF-IDF similarity). Falls back to default if unavailable."),
+    ] = False,
     home: Annotated[
         Path | None,
         typer.Option(
@@ -348,30 +370,66 @@ def search(
     initialize_database(paths.database_file)
     config = load_config(paths.config_file)
 
+    collection_filter = None
+    if collection is not None:
+        try:
+            collection_filter = CollectionState(collection)
+        except ValueError:
+            console.print(f"[red]Invalid collection state:[/red] {collection}")
+            console.print(f"Valid states: {', '.join(s.value for s in CollectionState)}")
+            raise typer.Exit(code=1)
+
     limit = top_k if top_k is not None else config.retrieval.top_k
     reader = CorpusReader(paths.database_file)
     indexer = TfidfIndexer(reader, TfidfIndexStore(paths.index_dir))
-    use_rerank = rerank or config.retrieval.rerank_by_default
-    reranker = None
-    rerank_warning = None
-    if use_rerank:
-        if not config.retrieval.rerank_enabled:
-            rerank_warning = "Rerank is disabled by configuration; using TF-IDF results."
-        else:
-            try:
-                reranker = build_reranker(config.retrieval.rerank_provider)
-            except RerankError as exc:
-                rerank_warning = f"Rerank unavailable; using TF-IDF results: {exc}"
-    response = CorpusRetriever(indexer).search_with_metadata(
-        query,
-        top_k=limit,
-        platform=platform,
-        reranker=reranker,
-        rerank_candidate_multiplier=config.retrieval.rerank_candidate_multiplier,
-    )
-    if response.warning is not None:
-        rerank_warning = response.warning.message
-    _print_search_result(response.results, explain=explain, retrieval_mode=response.retrieval_mode, warning=rerank_warning)
+
+    if semantic:
+        from skill_forge.retrieval.semantic import SemanticRetriever
+        semantic_retriever = SemanticRetriever(indexer)
+        semantic_response = semantic_retriever.search(query, top_k=limit, platform=platform)
+        results = semantic_response.results
+        retrieval_mode = semantic_response.retrieval_mode
+        warning = semantic_response.fallback_reason if semantic_response.fallback_used else None
+    else:
+        use_rerank = rerank or config.retrieval.rerank_by_default
+        reranker = None
+        rerank_warning = None
+        if use_rerank:
+            if not config.retrieval.rerank_enabled:
+                rerank_warning = "Rerank is disabled by configuration; using TF-IDF results."
+            else:
+                try:
+                    reranker = build_reranker(config.retrieval.rerank_provider)
+                except RerankError as exc:
+                    rerank_warning = f"Rerank unavailable; using TF-IDF results: {exc}"
+        response = CorpusRetriever(indexer).search_with_metadata(
+            query,
+            top_k=limit,
+            platform=platform,
+            reranker=reranker,
+            rerank_candidate_multiplier=config.retrieval.rerank_candidate_multiplier,
+        )
+        if response.warning is not None:
+            rerank_warning = response.warning.message
+        results = response.results
+        retrieval_mode = response.retrieval_mode
+        warning = rerank_warning
+
+    collection_warning = None
+    if collection_filter is not None or promoted_boost:
+        from skill_forge.retrieval.collection_integration import CollectionSearchFilter
+        collection_store = CollectionStore(paths.collections_dir)
+        collection_filter_obj = CollectionSearchFilter(collection_store)
+        results = collection_filter_obj.apply(
+            results,
+            collection_filter=collection_filter,
+            promoted_boost=0.10 if promoted_boost else 0.0,
+        )
+        if collection_filter is not None and not results:
+            collection_warning = f"No results match collection state '{collection_filter.value}'."
+
+    warning = warning or collection_warning
+    _print_search_result(results, explain=explain, retrieval_mode=retrieval_mode, warning=warning)
 
 
 @app.command()
@@ -463,9 +521,17 @@ def list_generated_skills(
     table = Table(title="Generated Skills")
     table.add_column("Name", no_wrap=True)
     table.add_column("Description")
+    table.add_column("Collection", no_wrap=True)
     table.add_column("Path")
     for entry in entries:
-        table.add_row(entry.name, entry.description or "-", str(entry.path))
+        collection_label = "-"
+        if entry.collection_record is not None:
+            collection_label = entry.collection_record.collection_state.value
+            if entry.collection_record.is_promoted:
+                collection_label = f"[bold green]{collection_label}[/bold green]"
+            elif entry.collection_record.is_curated_or_better:
+                collection_label = f"[cyan]{collection_label}[/cyan]"
+        table.add_row(entry.name, entry.description or "-", collection_label, str(entry.path))
     console.print(table)
 
 
@@ -552,6 +618,17 @@ def show_generated_skill(
             "Eval summary",
             f"{entry.eval_report.passed}/{entry.eval_report.total} passed, {entry.eval_report.failed} failed",
         )
+    if entry.collection_record is not None:
+        cr = entry.collection_record
+        table.add_row("Collection state", cr.collection_state.value)
+        table.add_row("Collection score", f"{cr.collection_score:.4f}")
+        table.add_row("Promotion score", f"{cr.promotion_score:.4f}")
+        table.add_row("Score version", cr.score_version)
+        if cr.rationale:
+            table.add_row("Collection rationale", cr.rationale)
+        table.add_row("Manual override", str(cr.manual_override))
+    else:
+        table.add_row("Collection state", "not tracked")
     console.print(table)
 
 
@@ -1033,6 +1110,247 @@ def resume(
     _print_draft_result(draft)
 
 
+# --- Collection subcommands ---
+
+
+def _collection_store(home: Path | None) -> tuple[SkillForgePaths, CollectionStore]:
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    return paths, CollectionStore(paths.collections_dir)
+
+
+def _collection_library_manager(home: Path | None, output_dir: Path | None = None) -> tuple[SkillForgePaths, SkillLibraryManager, AppConfig]:
+    paths = SkillForgePaths.resolve(home)
+    paths.ensure_directories()
+    write_default_config(paths.config_file)
+    config = load_config(paths.config_file)
+    output_path = _resolve_output_dir(
+        str(output_dir) if output_dir is not None else config.create.output_dir,
+        paths.home,
+        isolate_default=home is not None and output_dir is None,
+    )
+    collection_store = CollectionStore(paths.collections_dir)
+    return paths, SkillLibraryManager(output_path, collection_store=collection_store), config
+
+
+@collection_app.command("list")
+def collection_list(
+    state: Annotated[
+        str | None,
+        typer.Option("--state", help="Filter by collection state (candidate, curated, promoted, rejected)."),
+    ] = None,
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", help="Override the Skill Forge home directory."),
+    ] = None,
+) -> None:
+    """List Skills in the collection."""
+    _, store = _collection_store(home)
+    if state is not None:
+        try:
+            filter_state = CollectionState(state)
+        except ValueError:
+            console.print(f"[red]Invalid collection state:[/red] {state}")
+            console.print(f"Valid states: {', '.join(s.value for s in CollectionState)}")
+            raise typer.Exit(code=1)
+        records = store.list_by_state(filter_state)
+    else:
+        records = store.list_records()
+
+    if not records:
+        console.print("[yellow]No collection records found.[/yellow]")
+        return
+
+    table = Table(title="Skill Collection")
+    table.add_column("Skill ID", no_wrap=True)
+    table.add_column("Package", no_wrap=True)
+    table.add_column("State", no_wrap=True)
+    table.add_column("Collection Score", justify="right")
+    table.add_column("Promotion Score", justify="right")
+    table.add_column("Origin", no_wrap=True)
+    for record in records:
+        table.add_row(
+            record.skill_id,
+            record.package_name,
+            record.collection_state.value,
+            f"{record.collection_score:.4f}",
+            f"{record.promotion_score:.4f}",
+            record.origin_type,
+        )
+    console.print(table)
+
+
+@collection_app.command("show")
+def collection_show(
+    skill_id: Annotated[str, typer.Argument(help="Skill identifier to inspect.")],
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", help="Override the Skill Forge home directory."),
+    ] = None,
+) -> None:
+    """Show collection details for a Skill."""
+    _, store = _collection_store(home)
+    record = store.read_record(skill_id)
+    if record is None:
+        console.print(f"[red]Collection record not found:[/red] {skill_id}")
+        raise typer.Exit(code=1)
+
+    table = Table(title=f"Collection: {record.skill_id}")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Skill ID", record.skill_id)
+    table.add_row("Package", record.package_name)
+    table.add_row("Origin", record.origin_type)
+    table.add_row("Origin reference", record.origin_reference or "-")
+    table.add_row("State", record.collection_state.value)
+    table.add_row("Collection score", f"{record.collection_score:.4f}")
+    table.add_row("Promotion score", f"{record.promotion_score:.4f}")
+    table.add_row("Score version", record.score_version)
+    table.add_row("Tags", ", ".join(record.tags) or "-")
+    table.add_row("Rationale", record.rationale or "-")
+    table.add_row("Manual override", str(record.manual_override))
+    table.add_row("Last verified", record.last_verified_at or "-")
+    table.add_row("Created", record.created_at)
+    table.add_row("Updated", record.updated_at)
+    console.print(table)
+
+    snapshot = store.read_snapshot(skill_id)
+    if snapshot is not None:
+        snap_table = Table(title="Score Snapshot")
+        snap_table.add_column("Dimension")
+        snap_table.add_column("Score", justify="right")
+        snap_table.add_column("Evidence")
+        for dim in snapshot.dimensions:
+            snap_table.add_row(dim.name, f"{dim.score:.4f}", dim.evidence or "-")
+        snap_table.add_row("Collection (final)", f"{snapshot.final_collection_score:.4f}", "")
+        snap_table.add_row("Promotion (final)", f"{snapshot.final_promotion_score:.4f}", "")
+        console.print(snap_table)
+
+
+@collection_app.command("update")
+def collection_update(
+    skill_id: Annotated[str, typer.Argument(help="Skill identifier to update.")],
+    state: Annotated[str, typer.Option("--state", help="New collection state.")],
+    rationale: Annotated[
+        str | None,
+        typer.Option("--rationale", help="Reason for the state change."),
+    ] = None,
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", help="Override the Skill Forge home directory."),
+    ] = None,
+) -> None:
+    """Update the collection state of a Skill."""
+    try:
+        new_state = CollectionState(state)
+    except ValueError:
+        console.print(f"[red]Invalid collection state:[/red] {state}")
+        console.print(f"Valid states: {', '.join(s.value for s in CollectionState)}")
+        raise typer.Exit(code=1)
+
+    _, store = _collection_store(home)
+    record = store.update_state(skill_id, state=new_state, rationale=rationale, manual=True)
+    if record is None:
+        console.print(f"[red]Collection record not found:[/red] {skill_id}")
+        console.print("Run `skill-forge collection score <skill-id>` to create a record first.")
+        raise typer.Exit(code=1)
+
+    table = Table(title="Collection updated")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Skill ID", record.skill_id)
+    table.add_row("New state", record.collection_state.value)
+    table.add_row("Rationale", record.rationale or "-")
+    table.add_row("Updated", record.updated_at)
+    console.print(table)
+
+
+@collection_app.command("score")
+def collection_score(
+    skill_name: Annotated[str, typer.Argument(help="Generated Skill package name to score.")],
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", help="Override the Skill Forge home directory."),
+    ] = None,
+    output_dir: Annotated[
+        Path | None,
+        typer.Option("--output-dir", help="Override the generated Skill package directory."),
+    ] = None,
+) -> None:
+    """Compute collection and promotion scores for a Skill."""
+    paths, manager, app_config = _collection_library_manager(home, output_dir)
+    store = CollectionStore(paths.collections_dir)
+    scoring_config = ScoringConfig(
+        collection_weights=app_config.collection_scoring.collection_weights.model_dump(),
+        promotion_weights=app_config.collection_scoring.promotion_weights.model_dump(),
+        promotion_threshold=app_config.collection_scoring.promotion_threshold,
+        curated_threshold=app_config.collection_scoring.curated_threshold,
+    )
+
+    try:
+        entry = manager.show(skill_name)
+    except GeneratedSkillNotFoundError as exc:
+        console.print(f"[red]Skill package not found:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+    except GeneratedSkillMissingSkillMdError as exc:
+        console.print(f"[red]Skill package is missing SKILL.md:[/red] {exc.path}")
+        raise typer.Exit(code=1) from exc
+
+    inputs = ScoringInputs()
+    inputs.has_skill_md = entry.skill_md_path.is_file()
+    if entry.provenance is not None:
+        inputs.has_frontmatter = True
+        inputs.has_required_sections = True
+    if entry.provenance is not None:
+        inputs.quality_score = entry.provenance.quality_score
+        inputs.quality_status = entry.provenance.quality_status
+        inputs.content_quality_workflow = entry.provenance.content_quality.workflow_specificity if entry.provenance.content_quality else None
+        inputs.content_quality_constraint = entry.provenance.content_quality.constraint_verifiability if entry.provenance.content_quality else None
+        inputs.content_quality_gate = entry.provenance.content_quality.quality_gate_clarity if entry.provenance.content_quality else None
+        inputs.has_provenance = True
+        inputs.origin_type = entry.provenance.origin_type
+        inputs.has_applied_experience = bool(entry.provenance.applied_experience_rule_ids)
+    if entry.eval_report is not None:
+        inputs.eval_total = entry.eval_report.total
+        inputs.eval_passed = entry.eval_report.passed
+        inputs.eval_failed = entry.eval_report.failed
+
+    snapshot = compute_scores(inputs, config=scoring_config)
+    snapshot.skill_id = skill_name
+    store.write_snapshot(snapshot)
+
+    origin_type = entry.provenance.origin_type if entry.provenance else "unknown"
+    existing = store.read_record(skill_name)
+    if existing is None:
+        record = build_collection_record(
+            skill_id=skill_name,
+            package_name=skill_name,
+            origin_type=origin_type,
+            collection_state=CollectionState(suggested_state(snapshot.final_collection_score, snapshot.final_promotion_score, config=scoring_config)),
+            rationale="Auto-scored",
+        )
+        record.collection_score = snapshot.final_collection_score
+        record.promotion_score = snapshot.final_promotion_score
+        record.score_version = snapshot.score_version
+        store.write_record(record)
+    else:
+        existing.collection_score = snapshot.final_collection_score
+        existing.promotion_score = snapshot.final_promotion_score
+        existing.score_version = snapshot.score_version
+        store.write_record(existing)
+
+    table = Table(title="Collection score")
+    table.add_column("Dimension")
+    table.add_column("Score", justify="right")
+    table.add_column("Evidence")
+    for dim in snapshot.dimensions:
+        table.add_row(dim.name, f"{dim.score:.4f}", dim.evidence or "-")
+    table.add_row("Collection (final)", f"{snapshot.final_collection_score:.4f}", "")
+    table.add_row("Promotion (final)", f"{snapshot.final_promotion_score:.4f}", "")
+    table.add_row("Suggested state", suggested_state(snapshot.final_collection_score, snapshot.final_promotion_score, config=scoring_config), "")
+    console.print(table)
+
+
 def _resolve_output_dir(value: str, home: Path, *, isolate_default: bool = False) -> Path:
     if isolate_default and value == DEFAULT_OUTPUT_DIR:
         return home / "output"
@@ -1051,7 +1369,8 @@ def _library_manager(home: Path | None, output_dir: Path | None = None) -> Skill
         paths.home,
         isolate_default=home is not None and output_dir is None,
     )
-    return SkillLibraryManager(output_path)
+    collection_store = CollectionStore(paths.collections_dir)
+    return SkillLibraryManager(output_path, collection_store=collection_store)
 
 
 def _experience_service(home: Path | None) -> ExperienceService:

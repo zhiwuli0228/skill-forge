@@ -70,10 +70,13 @@ class SearchResult(BaseModel):
     retrieval_mode: str = "tfidf"
     rerank_score: float | None = None
     rerank_error: str | None = None
+    collection_state: str | None = None
+    collection_boost: float = 0.0
 
     @property
     def score_explanation(self) -> str:
         rerank = f", rerank={self.rerank_score:.3f}" if self.rerank_score is not None else ""
+        collection = f", collection={self.collection_boost:.3f}" if self.collection_boost > 0 else ""
         return (
             f"relevance={self.relevance_score:.3f}, "
             f"authority={self.authority_boost:.3f}, "
@@ -81,5 +84,6 @@ class SearchResult(BaseModel):
             f"freshness={self.freshness_boost:.3f}, "
             f"platform={self.platform_boost:.3f}, "
             f"final={self.score:.3f}"
+            f"{collection}"
             f"{rerank}"
         )
