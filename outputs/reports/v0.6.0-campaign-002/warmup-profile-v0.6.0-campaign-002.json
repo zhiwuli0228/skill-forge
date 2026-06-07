@@ -1,0 +1,110 @@
+{
+  "batchId": "v0.6.0-campaign-002",
+  "notes": "Ratios (warmupRatio.firstToLast, .firstToMean, .firstToMedian) are cross-campaign-comparable. Absolute ms (convergenceDeltaMs) and convergenceRatePct scale with workload size, so they are comparable across campaigns only when the workload is matched.",
+  "perProfile": {
+    "STEADY": {
+      "warmupRatio": {
+        "firstToLast": 0.9980513944706566,
+        "firstToMean": 1.0183919473094594,
+        "firstToMedian": 1.0183919473094594
+      },
+      "convergenceDeltaMs": -32.00000000288128,
+      "convergenceRatePct": -0.19524100062771457,
+      "runs": [
+        {
+          "runId": "steady-run-000-a162a7e5",
+          "durationMs": 16389.999999999418,
+          "exitCode": 0
+        },
+        {
+          "runId": "steady-run-001-a162e7ec",
+          "durationMs": 15765.999999999622,
+          "exitCode": 0
+        },
+        {
+          "runId": "steady-run-002-a1632585",
+          "durationMs": 16422.0000000023,
+          "exitCode": 0
+        }
+      ]
+    },
+    "SMALL_STEADY": {
+      "warmupRatio": {
+        "firstToLast": 0.37365957446804426,
+        "firstToMean": 0.5639510613017659,
+        "firstToMedian": 0.5639510613017659
+      },
+      "convergenceDeltaMs": -14719.00000000096,
+      "convergenceRatePct": -167.6232775310622,
+      "runs": [
+        {
+          "runId": "small_steady-run-000-a16365a2",
+          "durationMs": 8780.99999999904,
+          "exitCode": 0
+        },
+        {
+          "runId": "small_steady-run-001-a16387f3",
+          "durationMs": 7640.999999999622,
+          "exitCode": 0
+        },
+        {
+          "runId": "small_steady-run-002-a163a5ca",
+          "durationMs": 23500.0,
+          "exitCode": 0
+        }
+      ]
+    },
+    "RAMP": {
+      "warmupRatio": {
+        "firstToLast": 1.5197414221780623,
+        "firstToMean": 1.3971200000000785,
+        "firstToMedian": 1.3971200000000785
+      },
+      "convergenceDeltaMs": 10452.000000001135,
+      "convergenceRatePct": 34.19933250441905,
+      "runs": [
+        {
+          "runId": "ramp-run-000-a164019b",
+          "durationMs": 30562.000000001717,
+          "exitCode": 0
+        },
+        {
+          "runId": "ramp-run-001-a1647907",
+          "durationMs": 23639.999999999418,
+          "exitCode": 0
+        },
+        {
+          "runId": "ramp-run-002-a164d56c",
+          "durationMs": 20110.000000000582,
+          "exitCode": 0
+        }
+      ]
+    },
+    "BURST": {
+      "warmupRatio": {
+        "firstToLast": 0.5979230161418456,
+        "firstToMean": 0.6760257801032713,
+        "firstToMedian": 0.6760257801032713
+      },
+      "convergenceDeltaMs": -3561.999999998079,
+      "convergenceRatePct": -67.24561072303152,
+      "runs": [
+        {
+          "runId": "burst-run-000-a16523fb",
+          "durationMs": 5296.999999998661,
+          "exitCode": 0
+        },
+        {
+          "runId": "burst-run-001-a16538a1",
+          "durationMs": 6812.000000001717,
+          "exitCode": 0
+        },
+        {
+          "runId": "burst-run-002-a1655340",
+          "durationMs": 8858.99999999674,
+          "exitCode": 0
+        }
+      ]
+    }
+  }
+}

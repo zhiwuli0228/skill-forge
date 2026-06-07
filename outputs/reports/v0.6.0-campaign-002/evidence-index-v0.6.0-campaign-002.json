@@ -1,0 +1,116 @@
+{
+  "campaignId": "v0.6.0-campaign-002",
+  "versionName": "v0.6.0",
+  "createdAt": "2026-06-07T09:24:01.761138+00:00",
+  "totalRuns": 12,
+  "entries": [
+    {
+      "runId": "steady-run-000-a162a7e5",
+      "profile": "STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-steady-run-000-a162a7e5.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:20:57.829454+00:00",
+      "endTime": "2026-06-07T09:21:14.220591+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "steady-run-001-a162e7ec",
+      "profile": "STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-steady-run-001-a162e7ec.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:21:14.220591+00:00",
+      "endTime": "2026-06-07T09:21:29.989352+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "steady-run-002-a1632585",
+      "profile": "STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-steady-run-002-a1632585.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:21:29.989352+00:00",
+      "endTime": "2026-06-07T09:21:46.402835+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "small_steady-run-000-a16365a2",
+      "profile": "SMALL_STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-small_steady-run-000-a16365a2.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:21:46.402835+00:00",
+      "endTime": "2026-06-07T09:21:55.187479+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "small_steady-run-001-a16387f3",
+      "profile": "SMALL_STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-small_steady-run-001-a16387f3.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:21:55.187479+00:00",
+      "endTime": "2026-06-07T09:22:02.826220+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "small_steady-run-002-a163a5ca",
+      "profile": "SMALL_STEADY",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-small_steady-run-002-a163a5ca.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:22:02.826220+00:00",
+      "endTime": "2026-06-07T09:22:26.331723+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "ramp-run-000-a164019b",
+      "profile": "RAMP",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-ramp-run-000-a164019b.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:22:26.331723+00:00",
+      "endTime": "2026-06-07T09:22:56.888972+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "ramp-run-001-a1647907",
+      "profile": "RAMP",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-ramp-run-001-a1647907.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:22:56.903132+00:00",
+      "endTime": "2026-06-07T09:23:20.556474+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "ramp-run-002-a164d56c",
+      "profile": "RAMP",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-ramp-run-002-a164d56c.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:23:20.556474+00:00",
+      "endTime": "2026-06-07T09:23:40.667920+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "burst-run-000-a16523fb",
+      "profile": "BURST",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-burst-run-000-a16523fb.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:23:40.667920+00:00",
+      "endTime": "2026-06-07T09:23:45.953534+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "burst-run-001-a16538a1",
+      "profile": "BURST",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-burst-run-001-a16538a1.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:23:45.953534+00:00",
+      "endTime": "2026-06-07T09:23:52.768379+00:00",
+      "exitCode": 0
+    },
+    {
+      "runId": "burst-run-002-a1655340",
+      "profile": "BURST",
+      "rawEvidenceFile": "outputs\\reports\\v0.6.0-campaign-002\\raw-snapshots-burst-run-002-a1655340.jsonl",
+      "snapshotCount": 3,
+      "startTime": "2026-06-07T09:23:52.768379+00:00",
+      "endTime": "2026-06-07T09:24:01.632914+00:00",
+      "exitCode": 0
+    }
+  ]
+}

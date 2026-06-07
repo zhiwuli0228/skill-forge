@@ -1,0 +1,49 @@
+{
+  "campaignId": "v0.6.0-campaign-002",
+  "versionName": "v0.6.0",
+  "createdAt": "2026-06-07T09:24:01.763138+00:00",
+  "profileSummaries": {
+    "STEADY": {
+      "runCount": 3,
+      "avgDurationMs": 16192.666666667114,
+      "minDurationMs": 15765.999999999622,
+      "maxDurationMs": 16422.0000000023,
+      "allExitZero": true,
+      "allTestsPassed": true,
+      "totalSnapshots": 9,
+      "exitCodes": [
+        0,
+        0,
+        0
+      ]
+    },
+    "RAMP": {
+      "runCount": 3,
+      "avgDurationMs": 24770.66666666724,
+      "minDurationMs": 20110.000000000582,
+      "maxDurationMs": 30562.000000001717,
+      "allExitZero": true,
+      "allTestsPassed": true,
+      "totalSnapshots": 9,
+      "exitCodes": [
+        0,
+        0,
+        0
+      ]
+    },
+    "BURST": {
+      "runCount": 3,
+      "avgDurationMs": 6989.333333332373,
+      "minDurationMs": 5296.999999998661,
+      "maxDurationMs": 8858.99999999674,
+      "allExitZero": true,
+      "allTestsPassed": true,
+      "totalSnapshots": 9,
+      "exitCodes": [
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}
